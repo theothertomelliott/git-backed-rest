@@ -1,12 +1,15 @@
 package gitbackedrest
 
-import "net/http"
+import (
+	"context"
+	"net/http"
+)
 
 type APIBackend interface {
-	GET(path string) ([]byte, *APIError)
-	POST(path string, body []byte) *APIError
-	PUT(path string, body []byte) *APIError
-	DELETE(path string) *APIError
+	GET(ctx context.Context, path string) ([]byte, *APIError)
+	POST(ctx context.Context, path string, body []byte) *APIError
+	PUT(ctx context.Context, path string, body []byte) *APIError
+	DELETE(ctx context.Context, path string) *APIError
 
 	// TODO: This signature probably doesn't represent patching effectively
 	//PATCH(path string, body []byte) error

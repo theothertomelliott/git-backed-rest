@@ -28,7 +28,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGET(w http.ResponseWriter, r *http.Request) {
-	body, err := s.backend.GET(r.URL.Path)
+	body, err := s.backend.GET(r.Context(), r.URL.Path)
 	if err != nil {
 		http.Error(w, err.Error(), err.Code)
 		return
@@ -49,7 +49,7 @@ func (s *Server) handlePOST(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.backend.POST(r.URL.Path, body); err != nil {
+	if err := s.backend.POST(r.Context(), r.URL.Path, body); err != nil {
 		http.Error(w, err.Error(), err.Code)
 		return
 	}
@@ -63,7 +63,7 @@ func (s *Server) handlePUT(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.backend.PUT(r.URL.Path, body); err != nil {
+	if err := s.backend.PUT(r.Context(), r.URL.Path, body); err != nil {
 		http.Error(w, err.Error(), err.Code)
 		return
 	}
@@ -72,7 +72,7 @@ func (s *Server) handlePUT(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDELETE(w http.ResponseWriter, r *http.Request) {
-	if err := s.backend.DELETE(r.URL.Path); err != nil {
+	if err := s.backend.DELETE(r.Context(), r.URL.Path); err != nil {
 		http.Error(w, err.Error(), err.Code)
 		return
 	}

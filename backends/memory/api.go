@@ -1,6 +1,10 @@
 package memory
 
-import gitbackedrest "github.com/theothertomelliott/git-backed-rest"
+import (
+	"context"
+
+	gitbackedrest "github.com/theothertomelliott/git-backed-rest"
+)
 
 var _ gitbackedrest.APIBackend = (*Backend)(nil)
 
@@ -14,14 +18,14 @@ type Backend struct {
 	data map[string][]byte
 }
 
-func (b *Backend) GET(path string) ([]byte, *gitbackedrest.APIError) {
+func (b *Backend) GET(ctx context.Context, path string) ([]byte, *gitbackedrest.APIError) {
 	if value, ok := b.data[path]; ok {
 		return value, nil
 	}
 	return nil, gitbackedrest.ErrNotFound
 }
 
-func (b *Backend) POST(path string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
 	if _, ok := b.data[path]; ok {
 		return gitbackedrest.ErrConflict
 	}
@@ -29,7 +33,7 @@ func (b *Backend) POST(path string, body []byte) *gitbackedrest.APIError {
 	return nil
 }
 
-func (b *Backend) PUT(path string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
 	if _, ok := b.data[path]; !ok {
 		return gitbackedrest.ErrNotFound
 	}
@@ -37,7 +41,7 @@ func (b *Backend) PUT(path string, body []byte) *gitbackedrest.APIError {
 	return nil
 }
 
-func (b *Backend) DELETE(path string) *gitbackedrest.APIError {
+func (b *Backend) DELETE(ctx context.Context, path string) *gitbackedrest.APIError {
 	if _, ok := b.data[path]; !ok {
 		return gitbackedrest.ErrNotFound
 	}

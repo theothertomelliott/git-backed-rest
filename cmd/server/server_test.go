@@ -27,7 +27,7 @@ func TestServerGET(t *testing.T) {
 		t.Errorf("expected status code %d, got %d", http.StatusNotFound, resp.Code)
 	}
 
-	if err := server.backend.POST("/doc1", []byte("content1")); err != nil {
+	if err := server.backend.POST(req.Context(), "/doc1", []byte("content1")); err != nil {
 		t.Fatal(err)
 	}
 
