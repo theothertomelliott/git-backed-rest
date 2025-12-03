@@ -14,12 +14,10 @@ import (
 )
 
 func TestGet(t *testing.T) {
-
 	ctx := t.Context()
 
 	// Create a logical task for this test.
-	ctx, task := trace.NewTask(ctx, "TestGet")
-	defer task.End()
+	ctx, task := trace.NewTask(ctx, "SetupTestGet")
 
 	reg := trace.StartRegion(ctx, "createTestGitHubRepo")
 	remote, cleanup := createTestGitHubRepo(t)
@@ -41,8 +39,13 @@ func TestGet(t *testing.T) {
 	defer backend.Close()
 	reg.End()
 
+	defer task.End()
+
 	docPath := "doc1"
 	docContent := "content1"
+
+	ctx, task = trace.NewTask(ctx, "TestGET")
+	defer task.End()
 
 	_, getErr := backend.GET(ctx, docPath)
 	if getErr != gitbackedrest.ErrNotFound {
