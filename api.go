@@ -10,12 +10,6 @@ type APIBackend interface {
 	POST(ctx context.Context, path string, body []byte) *APIError
 	PUT(ctx context.Context, path string, body []byte) *APIError
 	DELETE(ctx context.Context, path string) *APIError
-
-	// TODO: This signature probably doesn't represent patching effectively
-	//PATCH(path string, body []byte) error
-
-	// TODO: what options should be available?
-	//OPTIONS(path string) error
 }
 
 var _ error = new(APIError)
