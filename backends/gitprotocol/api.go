@@ -7,6 +7,7 @@ import (
 	"runtime/trace"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/filemode"
@@ -62,10 +63,10 @@ func NewBackendWithAuth(endpoint string, auth transport.AuthMethod) (*Backend, e
 	}
 
 	// Create a connection to warm up the transport
-	_, err = b.getReadConnection(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("warming up: %w", err)
-	}
+	// _, err = b.getReadConnection(context.Background())
+	// if err != nil {
+	// 	return nil, fmt.Errorf("warming up: %w", err)
+	// }
 
 	return b, nil
 }
@@ -149,7 +150,6 @@ func (b *Backend) fetchTree(ctx context.Context, conn transport.Connection, hash
 	}
 
 	return tree, nil
-
 }
 
 func (b *Backend) getObjectAtPath(tree *object.Tree, path string) plumbing.Hash {
@@ -389,21 +389,16 @@ func (b *Backend) createBlobHash(ctx context.Context, content []byte) (plumbing.
 func (b *Backend) createCommit(ctx context.Context, parentHash, treeHash plumbing.Hash, message string) (string, error) {
 	defer trace.StartRegion(ctx, "createCommit").End()
 
-	// Get the parent commit to copy author/committer info
-	parentCommitObj, err := b.store.EncodedObject(plumbing.CommitObject, parentHash)
-	if err != nil {
-		return "", fmt.Errorf("getting parent commit: %w", err)
-	}
-
-	parentCommit, err := object.DecodeCommit(b.store, parentCommitObj)
-	if err != nil {
-		return "", fmt.Errorf("decoding parent commit: %w", err)
+	signature := object.Signature{
+		Name:  "git-backed-rest",
+		Email: "no-reply@telliott.me",
+		When:  time.Now(),
 	}
 
 	// Create new commit
 	commit := &object.Commit{
-		Author:       parentCommit.Author,
-		Committer:    parentCommit.Committer,
+		Author:       signature,
+		Committer:    signature,
 		Message:      message,
 		TreeHash:     treeHash,
 		ParentHashes: []plumbing.Hash{parentHash},
