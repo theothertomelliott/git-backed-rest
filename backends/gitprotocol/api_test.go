@@ -7,7 +7,9 @@ import (
 	"runtime/trace"
 	"testing"
 
+	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/go-git/go-git/v6/plumbing/transport/http"
+	"github.com/go-git/go-git/v6/plumbing/transport/ssh"
 	"github.com/google/go-github/v79/github"
 	"github.com/joho/godotenv"
 	gitbackedrest "github.com/theothertomelliott/git-backed-rest"
@@ -159,29 +161,39 @@ var ifPassed = func(t *testing.T, f func()) {
 
 // getAuthForEndpoint returns appropriate authentication for the endpoint.
 // For HTTP/HTTPS endpoints, it uses BasicAuth with TEST_GITHUB_PAT_TOKEN.
-// For SSH and other protocols, it returns nil (uses default auth).
-func getAuthForEndpoint(t *testing.T, endpoint string) *http.BasicAuth {
-	// Check if this is an HTTP/HTTPS endpoint
-	if len(endpoint) < 8 {
-		return nil
+// For SSH endpoints, it uses the SSH agent (default SSH configuration).
+func getAuthForEndpoint(t *testing.T, endpoint string) transport.AuthMethod {
+	// Parse the endpoint to determine the scheme
+	ep, err := transport.NewEndpoint(endpoint)
+	if err != nil {
+		t.Fatalf("parsing endpoint: %v", err)
 	}
-	scheme := endpoint[:8]
-	if scheme != "https://" && endpoint[:7] != "http://" {
-		// Not HTTP/HTTPS, use default auth (e.g., SSH)
-		return nil
+
+	// For SSH, use SSH agent authentication
+	if ep.Scheme == "ssh" {
+		auth, err := ssh.NewSSHAgentAuth("git")
+		if err != nil {
+			t.Fatalf("creating SSH agent auth: %v", err)
+		}
+		return auth
 	}
 
 	// For HTTP/HTTPS, use token from environment
-	githubToken := os.Getenv("TEST_GITHUB_PAT_TOKEN")
-	if githubToken == "" {
-		t.Fatal("TEST_GITHUB_PAT_TOKEN must be set for HTTP/HTTPS endpoints")
+	if ep.Scheme == "https" || ep.Scheme == "http" {
+		githubToken := os.Getenv("TEST_GITHUB_PAT_TOKEN")
+		if githubToken == "" {
+			t.Fatal("TEST_GITHUB_PAT_TOKEN must be set for HTTP/HTTPS endpoints")
+		}
+
+		// GitHub uses BasicAuth with token as password
+		return &http.BasicAuth{
+			Username: "git", // Can be any non-empty string for token auth
+			Password: githubToken,
+		}
 	}
 
-	// GitHub uses BasicAuth with token as password
-	return &http.BasicAuth{
-		Username: "git", // Can be any non-empty string for token auth
-		Password: githubToken,
-	}
+	// For other protocols, return nil
+	return nil
 }
 
 func createTestGitHubRepo(t *testing.T) (remote string, cleanup func()) {

@@ -49,6 +49,8 @@ func NewBackendWithAuth(endpoint string, auth transport.AuthMethod) (*Backend, e
 
 	store := memory.NewStorage()
 
+	fmt.Println(auth)
+
 	sess, err := c.NewSession(store, ep, auth)
 	if err != nil {
 		return nil, err
@@ -62,11 +64,15 @@ func NewBackendWithAuth(endpoint string, auth transport.AuthMethod) (*Backend, e
 		session:   sess,
 	}
 
-	// Create a connection to warm up the transport
-	// _, err = b.getReadConnection(context.Background())
-	// if err != nil {
-	// 	return nil, fmt.Errorf("warming up: %w", err)
-	// }
+	// Create connections to warm up the transport
+	_, err = b.getReadConnection(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("warming up: %w", err)
+	}
+	_, err = b.getWriteConnection(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("warming up: %w", err)
+	}
 
 	return b, nil
 }
