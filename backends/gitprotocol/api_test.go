@@ -1,6 +1,7 @@
 package gitprotocol
 
 import (
+	"context"
 	"log"
 	"os"
 	"runtime"
@@ -233,7 +234,7 @@ func createTestGitHubRepo(t *testing.T) (remote string, cleanup func()) {
 	}
 
 	return repo.GetHTMLURL(), func() {
-		_, err := client.Repositories.Delete(t.Context(), org, repoName)
+		_, err := client.Repositories.Delete(context.Background(), org, repoName)
 		if err != nil {
 			t.Fatal(err)
 		}
