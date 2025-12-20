@@ -2,13 +2,17 @@ package gitprotocol
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"runtime/trace"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/format/packfile"
@@ -49,19 +53,18 @@ func NewBackendWithAuth(endpoint string, auth transport.AuthMethod) (*Backend, e
 
 	store := memory.NewStorage()
 
-	fmt.Println(auth)
-
 	sess, err := c.NewSession(store, ep, auth)
 	if err != nil {
 		return nil, err
 	}
 
 	b := &Backend{
-		endpoint:  endpoint,
-		transport: c,
-		ep:        ep,
-		store:     store,
-		session:   sess,
+		endpoint:   endpoint,
+		transport:  c,
+		ep:         ep,
+		store:      store,
+		session:    sess,
+		lockWrites: true,
 	}
 
 	// Create connections to warm up the transport
@@ -82,9 +85,13 @@ type Backend struct {
 
 	transport transport.Transport
 	ep        *transport.Endpoint
+	storeMtx  sync.Mutex
 	store     *memory.Storage
 
 	session transport.Session
+
+	writeMtx   sync.Mutex
+	lockWrites bool
 }
 
 // DELETE implements gitbackedrest.APIBackend.
@@ -124,6 +131,9 @@ func (b *Backend) fetchTree(ctx context.Context, conn transport.Connection, hash
 	if conn.Capabilities().Supports(capability.Filter) {
 		fetchReq.Filter = packp.FilterBlobLimit(0, packp.BlobLimitPrefixNone)
 	}
+
+	b.storeMtx.Lock()
+	defer b.storeMtx.Unlock()
 
 	err := conn.Fetch(ctx, fetchReq)
 	if err != nil {
@@ -168,6 +178,9 @@ func (b *Backend) getObjectAtPath(tree *object.Tree, path string) plumbing.Hash 
 }
 
 func (b *Backend) getObjectByHash(ctx context.Context, conn transport.Connection, hash plumbing.Hash) (plumbing.EncodedObject, error) {
+	b.storeMtx.Lock()
+	defer b.storeMtx.Unlock()
+
 	blob, err := b.store.EncodedObject(plumbing.BlobObject, hash)
 
 	if err == nil {
@@ -237,32 +250,32 @@ func (b *Backend) simpleGET(ctx context.Context, path string) ([]byte, error) {
 	return b.readBlob(blob)
 }
 
-func (b *Backend) simplePOST(ctx context.Context, path string, body []byte) error {
+func (b *Backend) simplePOST(ctx context.Context, path string, body []byte) (plumbing.Hash, error) {
 	conn, err := b.getReadConnection(ctx)
 	if err != nil {
-		return fmt.Errorf("getting connection: %w", err)
+		return plumbing.ZeroHash, fmt.Errorf("getting connection: %w", err)
 	}
 
 	// Get the current tree
 	mainHash, err := b.getMainHash(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("getting main: %w", err)
+		return plumbing.ZeroHash, fmt.Errorf("getting main: %w", err)
 	}
 	tree, err := b.fetchTree(ctx, conn, mainHash)
 	if err != nil {
-		return fmt.Errorf("fetching tree: %w", err)
+		return plumbing.ZeroHash, fmt.Errorf("fetching tree: %w", err)
 	}
 
 	// Error out if the object already exists
 	objectHash := b.getObjectAtPath(tree, path)
 	if objectHash != plumbing.ZeroHash {
-		return gitbackedrest.ErrConflict
+		return plumbing.ZeroHash, gitbackedrest.ErrConflict
 	}
 
 	// Create new blob with the body content
 	blobHash, err := b.createBlobHash(ctx, body)
 	if err != nil {
-		return fmt.Errorf("creating blob: %w", err)
+		return plumbing.ZeroHash, fmt.Errorf("creating blob: %w", err)
 	}
 
 	// Add the new blob to the tree
@@ -277,28 +290,37 @@ func (b *Backend) simplePOST(ctx context.Context, path string, body []byte) erro
 	})
 
 	// Encode and store the tree
-	encoded := b.store.NewEncodedObject()
-	if err := tree.Encode(encoded); err != nil {
-		return fmt.Errorf("encoding tree: %w", err)
-	}
+	newTreeHash, err := func() (plumbing.Hash, error) {
+		b.storeMtx.Lock()
+		defer b.storeMtx.Unlock()
 
-	newTreeHash, err := b.store.SetEncodedObject(encoded)
+		encoded := b.store.NewEncodedObject()
+		if err := tree.Encode(encoded); err != nil {
+			return plumbing.ZeroHash, fmt.Errorf("encoding tree: %w", err)
+		}
+
+		newTreeHash, err := b.store.SetEncodedObject(encoded)
+		if err != nil {
+			return plumbing.ZeroHash, fmt.Errorf("storing tree: %w", err)
+		}
+		return newTreeHash, nil
+	}()
 	if err != nil {
-		return fmt.Errorf("storing tree: %w", err)
+		return plumbing.ZeroHash, fmt.Errorf("creating tree: %w", err)
 	}
 
 	// Create new commit of the updated tree hash on top of the current main hash
 	newCommitHash, err := b.createCommit(ctx, mainHash, newTreeHash, fmt.Sprintf("write %s", path))
 	if err != nil {
-		return fmt.Errorf("creating commit: %w", err)
+		return plumbing.ZeroHash, fmt.Errorf("creating commit: %w", err)
 	}
 
 	// Push the new commit
-	if err := b.pushCommit(ctx, newCommitHash, "main"); err != nil {
-		return fmt.Errorf("pushing commit: %w", err)
+	if err := b.pushCommit(ctx, mainHash, newCommitHash, "main"); err != nil {
+		return plumbing.ZeroHash, fmt.Errorf("pushing commit: %w", err)
 	}
 
-	return nil
+	return newCommitHash, nil
 }
 
 // GET implements gitbackedrest.APIBackend.
@@ -319,13 +341,32 @@ func (b *Backend) GET(ctx context.Context, path string) ([]byte, *gitbackedrest.
 func (b *Backend) POST(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
 	defer trace.StartRegion(ctx, "POST").End()
 
-	err := b.simplePOST(ctx, path, body)
+	if b.lockWrites {
+		b.writeMtx.Lock()
+		defer b.writeMtx.Unlock()
+	}
+
+	operation := func() (plumbing.Hash, error) {
+		commit, err := b.simplePOST(ctx, path, body)
+		if err != nil {
+			if err == gitbackedrest.ErrConflict {
+				return plumbing.ZeroHash, backoff.Permanent(gitbackedrest.ErrConflict)
+			}
+			return plumbing.ZeroHash, err
+		}
+		return commit, nil
+	}
+
+	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
-		if err == gitbackedrest.ErrConflict {
+		if errors.Is(err, gitbackedrest.ErrConflict) {
 			return gitbackedrest.ErrConflict
 		}
+		fmt.Println("Error:", err)
 		return gitbackedrest.ErrInternalServerError
 	}
+	//log.Printf("Pushed commit for %q: %s", path, commit)
+
 	return nil
 }
 
@@ -357,13 +398,15 @@ func (r *Backend) getReadConnection(ctx context.Context) (transport.Connection, 
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println(conn.Version())
 	return conn, nil
 }
 
 func (b *Backend) createBlobHash(ctx context.Context, content []byte) (plumbing.Hash, error) {
 	defer trace.StartRegion(ctx, "createBlob").End()
+
+	b.storeMtx.Lock()
+	defer b.storeMtx.Unlock()
+
 	blob := b.store.NewEncodedObject()
 	blob.SetType(plumbing.BlobObject)
 	blob.SetSize(int64(len(content)))
@@ -392,7 +435,7 @@ func (b *Backend) createBlobHash(ctx context.Context, content []byte) (plumbing.
 }
 
 // createCommit creates a new commit object with the given parent, tree, and message
-func (b *Backend) createCommit(ctx context.Context, parentHash, treeHash plumbing.Hash, message string) (string, error) {
+func (b *Backend) createCommit(ctx context.Context, parentHash, treeHash plumbing.Hash, message string) (plumbing.Hash, error) {
 	defer trace.StartRegion(ctx, "createCommit").End()
 
 	signature := object.Signature{
@@ -410,28 +453,26 @@ func (b *Backend) createCommit(ctx context.Context, parentHash, treeHash plumbin
 		ParentHashes: []plumbing.Hash{parentHash},
 	}
 
+	b.storeMtx.Lock()
+	defer b.storeMtx.Unlock()
+
 	// Encode and store the commit
 	encoded := b.store.NewEncodedObject()
 	if err := commit.Encode(encoded); err != nil {
-		return "", fmt.Errorf("encoding commit: %w", err)
+		return plumbing.ZeroHash, fmt.Errorf("encoding commit: %w", err)
 	}
 
 	hash, err := b.store.SetEncodedObject(encoded)
 	if err != nil {
-		return "", fmt.Errorf("storing commit: %w", err)
+		return plumbing.ZeroHash, fmt.Errorf("storing commit: %w", err)
 	}
 
-	return hash.String(), nil
+	return hash, nil
 }
 
 // pushCommit pushes a commit to the remote repository
-func (b *Backend) pushCommit(ctx context.Context, commitHash, branchName string) error {
+func (b *Backend) pushCommit(ctx context.Context, oldHash, commitHash plumbing.Hash, branchName string) error {
 	defer trace.StartRegion(ctx, "pushCommit").End()
-	commitHashObj, ok := plumbing.FromHex(commitHash)
-	if !ok {
-		return fmt.Errorf("invalid commit hash: %s", commitHash)
-	}
-
 	conn, err := b.getWriteConnection(ctx)
 	if err != nil {
 		return fmt.Errorf("getting write connection: %w", err)
@@ -440,22 +481,8 @@ func (b *Backend) pushCommit(ctx context.Context, commitHash, branchName string)
 	// Build the push request
 	refName := plumbing.NewBranchReferenceName(branchName)
 
-	// Get current remote ref to use as old hash
-	refs, err := conn.GetRemoteRefs(ctx)
-	if err != nil {
-		return fmt.Errorf("getting remote refs: %w", err)
-	}
-
-	var oldHash plumbing.Hash
-	for _, ref := range refs {
-		if ref.Name() == refName {
-			oldHash = ref.Hash()
-			break
-		}
-	}
-
 	// Build packfile with new objects
-	packfileReader, err := b.buildPackfile(commitHashObj)
+	packfileReader, err := b.buildPackfile(commitHash)
 	if err != nil {
 		return fmt.Errorf("building packfile: %w", err)
 	}
@@ -466,17 +493,20 @@ func (b *Backend) pushCommit(ctx context.Context, commitHash, branchName string)
 			{
 				Name: refName,
 				Old:  oldHash,
-				New:  commitHashObj,
+				New:  commitHash,
 			},
 		},
 		Packfile: packfileReader,
+		Atomic:   true,
 	}
 
 	// Send the push
+	//	log.Printf("Sending push request old=%v new=%v", oldHash, commitHash)
 	err = conn.Push(ctx, pushReq)
 	if err != nil {
-		return fmt.Errorf("pushing commit: %w", err)
+		return fmt.Errorf("sending push request: %w", err)
 	}
+	log.Printf("Successful push request old=%v new=%v", oldHash, commitHash)
 
 	return nil
 }
@@ -488,6 +518,9 @@ func (b *Backend) buildPackfile(newCommit plumbing.Hash) (io.ReadCloser, error) 
 
 	go func() {
 		defer pw.Close()
+
+		b.storeMtx.Lock()
+		defer b.storeMtx.Unlock()
 
 		// Create packfile encoder
 		encoder := packfile.NewEncoder(pw, b.store, false)
@@ -518,6 +551,8 @@ func (b *Backend) buildPackfile(newCommit plumbing.Hash) (io.ReadCloser, error) 
 
 // walkCommit walks all objects reachable from newCommit but not from oldCommit
 func (b *Backend) walkCommit(commit plumbing.Hash, fn func(plumbing.Hash) error) error {
+	// Note: the caller handles locking here
+
 	// Add the new commit
 	if err := fn(commit); err != nil {
 		return err
@@ -544,6 +579,8 @@ func (b *Backend) walkCommit(commit plumbing.Hash, fn func(plumbing.Hash) error)
 
 // walkTree walks all objects in a tree recursively
 func (b *Backend) walkTree(treeHash plumbing.Hash, fn func(plumbing.Hash) error) error {
+	// Note: the caller handles locking here
+
 	// Add the tree itself
 	if err := fn(treeHash); err != nil {
 		return err

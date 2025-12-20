@@ -1,11 +1,12 @@
 module github.com/theothertomelliott/git-backed-rest
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.40.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.93.0
+	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/go-git/go-git/v6 v6.0.0-20251206100705-e633db5b9a34
 	github.com/google/go-github/v79 v79.0.0
 	github.com/joho/godotenv v1.5.1
