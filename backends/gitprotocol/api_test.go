@@ -102,7 +102,7 @@ func TestGetPreexisting(t *testing.T) {
 	}
 }
 
-func testPut(t *testing.T) {
+func TestPut(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a logical task for this test.
@@ -123,15 +123,65 @@ func testPut(t *testing.T) {
 	docContentPost := "content1"
 	docContentPut := "content2"
 
+	t.Log("First PUT - should fail")
 	if err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
 		t.Errorf("expected not found error on put to missing path, got %v", err)
 	}
 
+	t.Log("POST")
 	if err := backend.POST(ctx, docPath, []byte(docContentPost)); err != nil {
 		t.Fatal(err)
 	}
 
+	t.Log("Second PUT - should succeed")
 	if err := backend.PUT(ctx, docPath, []byte(docContentPut)); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log("GET for confirmation")
+	body, getErr := backend.GET(ctx, docPath)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if string(body) != docContentPut {
+		t.Errorf("expected body %s, got %s", docContentPut, string(body))
+	}
+}
+
+func TestDelete(t *testing.T) {
+	ctx := t.Context()
+
+	// Create a logical task for this test.
+	ctx, task := trace.NewTask(ctx, "SetupTestDelete")
+
+	reg := trace.StartRegion(ctx, "createTestGitHubRepo")
+	remote, cleanup := createTestGitHubRepo(t)
+	defer ifPassed(t, cleanup)
+	reg.End()
+
+	reg = trace.StartRegion(ctx, "NewBackend")
+	auth := getAuthForEndpoint(t, remote)
+	backend, err := NewBackendWithAuth(remote, auth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+	reg.End()
+
+	defer task.End()
+
+	docPath := "doc1"
+	docContent := "content1"
+
+	ctx, task = trace.NewTask(ctx, "TestDelete")
+	defer task.End()
+
+	_, getErr := backend.GET(ctx, docPath)
+	if getErr != gitbackedrest.ErrNotFound {
+		t.Fatal(getErr)
+	}
+
+	if err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -139,8 +189,17 @@ func testPut(t *testing.T) {
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContentPut {
-		t.Errorf("expected body %s, got %s", docContentPut, string(body))
+	if string(body) != docContent {
+		t.Errorf("expected body %s, got %s", docContent, string(body))
+	}
+
+	if err := backend.DELETE(ctx, docPath); err != nil {
+		t.Fatal(err)
+	}
+
+	_, getErr = backend.GET(ctx, docPath)
+	if getErr != gitbackedrest.ErrNotFound {
+		t.Fatal(getErr)
 	}
 }
 
