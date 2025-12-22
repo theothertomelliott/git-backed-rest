@@ -1,76 +1,53 @@
 package gitprotocol
 
 import (
-	"context"
-	"fmt"
 	"testing"
 
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/storage/memory"
 )
 
-func TestAddToTree(t *testing.T) {
-	be, err := NewBackend("https://github.com/theothertomelliott/actions_needs.git")
+func TestBuildTree(t *testing.T) {
+
+	tree := &object.Tree{}
+
+	blobHash := plumbing.NewHash("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2")
+	blobHash2 := plumbing.NewHash("2c3fb84f37ed799d8516329a898059b1bc8aba5d")
+	blobHash3 := plumbing.NewHash("b3d9864fe9fc6698c0f458600055e56863bae418")
+
+	ms := memory.NewStorage()
+
+	tree, err := setTreePath(tree, "README.md", blobHash, ms)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log(tree.Entries)
+	t.Log(tree.Hash)
 
-	content, err := be.simpleGET(t.Context(), "README.md")
+	tree, err = setTreePath(tree, "dir1/dir2/file.txt", blobHash2, ms)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log(tree.Entries)
+	t.Log(tree.Hash)
 
-	fmt.Println(string(content))
-
-	tree, err := be.getTree(t.Context())
+	tree, err = setTreePath(tree, "README.md", blobHash3, ms)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log(tree.Entries)
+	t.Log(tree.Hash)
 
-	for _, entry := range tree.Entries {
-		fmt.Println(entry.Name, entry.Mode.IsFile(), entry.Hash)
-		if !entry.Mode.IsFile() {
-			subTree, err := be.loadSubTree(t.Context(), entry.Hash)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, subEntry := range subTree.Entries {
-				fmt.Println(subEntry.Name, subEntry.Mode.IsFile(), subEntry.Hash)
-			}
-		}
-	}
-}
-
-func (b *Backend) loadSubTree(ctx context.Context, treeHash plumbing.Hash) (*object.Tree, error) {
-	// Get the tree object
-	treeObj, err := b.store.EncodedObject(plumbing.TreeObject, treeHash)
-	if err != nil {
-		return nil, fmt.Errorf("getting tree object: %w", err)
+	if te, err := tree.FindEntry("README.md"); err != nil {
+		t.Fatal(err)
+	} else if te.Hash != blobHash3 {
+		t.Fatal("README.md: hash mismatch")
 	}
 
-	// Decode and build the tree structure
-	tree, err := object.DecodeTree(b.store, treeObj)
-	if err != nil {
-		return nil, fmt.Errorf("decoding tree: %w", err)
+	if te, err := tree.FindEntry("dir1/dir2/file.txt"); err != nil {
+		t.Fatal(err)
+	} else if te.Hash != blobHash2 {
+		t.Fatal("dir1/dir2/file.txt: hash mismatch")
 	}
-	return tree, nil
-}
-
-func (b *Backend) getTree(ctx context.Context) (*object.Tree, error) {
-	conn, err := b.getReadConnection(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("getting connection: %w", err)
-	}
-
-	refHash, err := b.getMainHash(ctx, conn)
-	if err != nil {
-		return nil, fmt.Errorf("getting main: %w", err)
-	}
-
-	tree, err := b.fetchTree(ctx, conn, refHash)
-	if err != nil {
-		return nil, fmt.Errorf("fetching tree: %w", err)
-	}
-
-	return tree, nil
 }

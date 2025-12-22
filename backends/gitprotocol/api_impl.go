@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v6/plumbing/protocol/packp/capability"
+	"github.com/go-git/go-git/v6/plumbing/storer"
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	gitbackedrest "github.com/theothertomelliott/git-backed-rest"
 )
@@ -114,57 +115,108 @@ func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, must
 	return newCommitHash, nil
 }
 
-func modifyTree(tree *object.Tree, path string, blobHash plumbing.Hash) (*object.Tree, error) {
+func setTreePath(
+	tree *object.Tree,
+	path string,
+	blobHash plumbing.Hash,
+	objectCreator storer.EncodedObjectStorer,
+) (*object.Tree, error) {
+	newPath := path
+	newHash := blobHash
+
 	// Base case, no separators
-	if !strings.Contains(path, "/") {
+	if strings.Contains(path, "/") {
+		// Get the first directory in the path
+		parts := strings.SplitN(path, "/", 2)
+		dirName := parts[0]
+		remainingPath := parts[1]
+		_ = dirName
+		_ = remainingPath
 
-		oldEntries := tree.Entries
-		tree.Entries = nil
-
-		found := false
-		for _, entry := range oldEntries {
-			if entry.Name == path {
-				found = true
-				if blobHash == plumbing.ZeroHash {
-					continue
-				}
-				tree.Entries = append(tree.Entries, object.TreeEntry{
-					Name: path,
-					Mode: filemode.Regular,
-					Hash: blobHash,
-				})
-				continue
+		subTree, err := tree.Tree(dirName)
+		if err != nil {
+			if !errors.Is(err, object.ErrDirectoryNotFound) {
+				return nil, fmt.Errorf("getting sub tree: %w", err)
 			}
-			tree.Entries = append(tree.Entries, entry)
+			if blobHash == plumbing.ZeroHash {
+				return nil, nil
+			}
+			// Make a new tree
+			subTree = &object.Tree{}
 		}
 
-		// Path is not in the tree, add the blob
-		if !found && blobHash != plumbing.ZeroHash {
-			tree.Entries = append(tree.Entries, object.TreeEntry{
-				Name: path,
-				Mode: filemode.Regular,
-				Hash: blobHash,
-			})
-			// Sort entries as required by git
-			sort.Slice(tree.Entries, func(i, j int) bool {
-				return tree.Entries[i].Name < tree.Entries[j].Name
-			})
+		// Get the directory tree
+		dirTree, err := setTreePath(subTree, remainingPath, blobHash, objectCreator)
+		if err != nil {
+			return nil, fmt.Errorf("modifying directory tree: %w", err)
 		}
-		return tree, nil
+
+		newHash = dirTree.Hash
+		newPath = dirName
 	}
 
-	// Otherwise, we need to create a sub tree
-	return nil, errors.New("multiple paths not supported")
+	newTree := &object.Tree{}
+
+	oldEntries := tree.Entries
+
+	found := false
+	for _, entry := range oldEntries {
+		if entry.Name != newPath {
+			newTree.Entries = append(newTree.Entries, entry)
+			continue
+		}
+
+		found = true
+		if blobHash == plumbing.ZeroHash {
+			continue
+		}
+		newTree.Entries = append(newTree.Entries, object.TreeEntry{
+			Name: newPath,
+			Mode: filemode.Regular,
+			Hash: newHash,
+		})
+	}
+
+	// Path is not in the tree, add the blob
+	if !found && blobHash != plumbing.ZeroHash {
+		newTree.Entries = append(newTree.Entries, object.TreeEntry{
+			Name: newPath,
+			Mode: filemode.Regular,
+			Hash: newHash,
+		})
+		// Sort entries as required by git
+		sort.Slice(newTree.Entries, func(i, j int) bool {
+			return newTree.Entries[i].Name < newTree.Entries[j].Name
+		})
+	}
+
+	// Encode/decode to get the hash
+	obj := objectCreator.NewEncodedObject()
+	if err := newTree.Encode(obj); err != nil {
+		return nil, fmt.Errorf("encoding tree: %w", err)
+	}
+
+	_, err := objectCreator.SetEncodedObject(obj)
+	if err != nil {
+		return nil, fmt.Errorf("setting encoded object: %w", err)
+	}
+
+	newTree, err = object.DecodeTree(objectCreator, obj)
+	if err != nil {
+		return nil, fmt.Errorf("decoding tree: %w", err)
+	}
+
+	return newTree, nil
 }
 
 func (b *Backend) addToTree(tree *object.Tree, path string, blobHash plumbing.Hash) (plumbing.Hash, error) {
-	tree, err := modifyTree(tree, path, blobHash)
+	b.storeMtx.Lock()
+	defer b.storeMtx.Unlock()
+
+	tree, err := setTreePath(tree, path, blobHash, b.store)
 	if err != nil {
 		return plumbing.ZeroHash, err
 	}
-
-	b.storeMtx.Lock()
-	defer b.storeMtx.Unlock()
 
 	encoded := b.store.NewEncodedObject()
 	if err := tree.Encode(encoded); err != nil {
@@ -218,32 +270,12 @@ func (b *Backend) fetchTree(ctx context.Context, conn transport.Connection, hash
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
 
-	// Get the commit object
-	commit, err := b.store.EncodedObject(plumbing.CommitObject, hash)
+	commit, err := object.GetCommit(b.store, hash)
 	if err != nil {
-		return nil, fmt.Errorf("getting commit object: %w", err)
+		return nil, fmt.Errorf("getting commit: %w", err)
 	}
 
-	// Decode the commit to get the tree hash
-	commitDecoded, err := object.DecodeCommit(b.store, commit)
-	if err != nil {
-		return nil, fmt.Errorf("decoding commit: %w", err)
-	}
-
-	// Get the tree object
-	treeHash := commitDecoded.TreeHash
-	treeObj, err := b.store.EncodedObject(plumbing.TreeObject, treeHash)
-	if err != nil {
-		return nil, fmt.Errorf("getting tree object: %w", err)
-	}
-
-	// Decode and build the tree structure
-	tree, err := object.DecodeTree(b.store, treeObj)
-	if err != nil {
-		return nil, fmt.Errorf("decoding tree: %w", err)
-	}
-
-	return tree, nil
+	return commit.Tree()
 }
 
 func (b *Backend) getObjectAtPath(tree *object.Tree, path string) plumbing.Hash {
