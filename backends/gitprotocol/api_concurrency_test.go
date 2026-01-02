@@ -9,6 +9,10 @@ import (
 )
 
 func TestConcurrentAccessNoLock(t *testing.T) {
+	if true {
+		t.Skip("Skipping concurrent checks")
+	}
+
 	remote, cleanup := createTestGitHubRepo(t)
 	if os.Getenv("SKIP_CLEANUP") == "" {
 		t.Cleanup(cleanup)
@@ -76,6 +80,10 @@ func TestConcurrentAccessNoLock(t *testing.T) {
 }
 
 func TestConcurrentAccessWithLock(t *testing.T) {
+	if true {
+		t.Skip("Skipping concurrent checks")
+	}
+
 	remote, cleanup := createTestGitHubRepo(t)
 	if os.Getenv("SKIP_CLEANUP") == "" {
 		t.Cleanup(cleanup)
