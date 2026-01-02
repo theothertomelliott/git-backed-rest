@@ -23,6 +23,8 @@ import (
 )
 
 func (b *Backend) simpleGET(ctx context.Context, path string) ([]byte, error) {
+	path = strings.TrimPrefix(path, "/")
+
 	conn, err := b.getReadConnection(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting connection: %w", err)
@@ -53,6 +55,8 @@ func (b *Backend) simpleGET(ctx context.Context, path string) ([]byte, error) {
 }
 
 func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, mustNotExist bool) (plumbing.Hash, error) {
+	path = strings.TrimPrefix(path, "/")
+
 	conn, err := b.getReadConnection(ctx)
 	if err != nil {
 		return plumbing.ZeroHash, fmt.Errorf("getting connection: %w", err)
