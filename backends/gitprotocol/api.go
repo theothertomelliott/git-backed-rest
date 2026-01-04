@@ -86,6 +86,11 @@ type Backend struct {
 	lockWrites bool
 }
 
+// GetEndpoint returns the endpoint used by the backend.
+func (b *Backend) GetEndpoint() string {
+	return b.endpoint
+}
+
 // DELETE implements gitbackedrest.APIBackend.
 func (b *Backend) DELETE(ctx context.Context, path string) *gitbackedrest.APIError {
 	defer trace.StartRegion(ctx, "DELETE").End()

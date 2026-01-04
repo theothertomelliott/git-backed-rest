@@ -3,42 +3,15 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"time"
 
-	gitbackedrest "github.com/theothertomelliott/git-backed-rest"
-	"github.com/theothertomelliott/git-backed-rest/backends/gitprotocol"
 	"github.com/theothertomelliott/git-backed-rest/client"
-	"github.com/theothertomelliott/git-backed-rest/server"
 )
 
 func main() {
-	ctx := context.Background()
-
-	// Create backend with cleanup
-	backend, cleanup, err := gitprotocol.NewTestBackend(ctx)
-	if err != nil {
-		log.Fatalf("Failed to create backend: %v", err)
-	}
-	// Cleanup the repo when done
-	defer cleanup()
-
-	// Start server and get shutdown function
-	shutdown := runServer(backend)
-
-	// Give the server a moment to start
-	log.Printf("Waiting for server to be ready...")
-	time.Sleep(1 * time.Second)
-
 	// Run client operations
 	if err := runClientOperations(); err != nil {
 		log.Printf("Client operations failed: %v", err)
-	}
-
-	// Shutdown server
-	log.Println("Shutting down server...")
-	if err := shutdown(); err != nil {
-		log.Printf("Error shutting down server: %v", err)
 	}
 
 	log.Println("Test complete, exiting")
@@ -109,33 +82,4 @@ func runClientOperations() error {
 	log.Printf("✓ Resource successfully deleted")
 
 	return nil
-}
-
-func runServer(backend gitbackedrest.APIBackend) func() error {
-	server := server.New(backend)
-	http.HandleFunc("/", server.HandleRequest)
-
-	port := ":8080"
-	log.Printf("Starting server on %s", port)
-
-	// Create http.Server for proper shutdown
-	httpServer := &http.Server{
-		Addr:    port,
-		Handler: nil, // Use default ServeMux
-	}
-
-	// Start server in goroutine
-	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Server error: %v", err)
-		}
-	}()
-
-	// Return shutdown function
-	return func() error {
-		log.Println("Shutting down HTTP server...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return httpServer.Shutdown(shutdownCtx)
-	}
 }
