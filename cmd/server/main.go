@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"os"
@@ -65,32 +64,24 @@ func createBackend(backendType string) (gitbackedrest.APIBackend, func(), error)
 }
 
 func createGitBackend() (gitbackedrest.APIBackend, func(), error) {
-	// For git backend, we can either create a test repo or use an existing one
+	// Require explicit repository URL
 	testRepoURL := getEnv("GIT_REPO_URL", "")
-	if testRepoURL != "" {
-		// Use existing repository
-		auth, err := gitprotocol.GetAuthForEndpoint(testRepoURL)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		backend, err := gitprotocol.NewBackendWithAuth(testRepoURL, auth)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return backend, nil, nil
+	if testRepoURL == "" {
+		log.Fatalf("GIT_REPO_URL environment variable must be set for git backend")
 	}
 
-	// Create test repository (requires TEST_GITHUB_ORG and TEST_GITHUB_PAT_TOKEN)
-	ctx := context.Background()
-	backend, cleanup, err := gitprotocol.NewTestBackend(ctx)
+	// Use existing repository
+	auth, err := gitprotocol.GetAuthForEndpoint(testRepoURL)
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Printf("Created test repository: %s", backend.GetEndpoint())
 
-	return backend, cleanup, nil
+	backend, err := gitprotocol.NewBackendWithAuth(testRepoURL, auth)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return backend, nil, nil
 }
 
 func createS3Backend() (gitbackedrest.APIBackend, func(), error) {

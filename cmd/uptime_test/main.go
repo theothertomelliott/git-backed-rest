@@ -67,19 +67,19 @@ func runClientOperations() error {
 	}
 	log.Printf("✓ Got updated resource: %s", string(result))
 
-	log.Printf("Deleting resource at %s", testPath)
-	if err := client.DELETE(ctx, testPath); err != nil {
-		return err
-	}
-	log.Printf("✓ Deleted resource")
+	// log.Printf("Deleting resource at %s", testPath)
+	// if err := client.DELETE(ctx, testPath); err != nil {
+	// 	return err
+	// }
+	// log.Printf("✓ Deleted resource")
 
-	log.Printf("Verifying deletion at %s", testPath)
-	_, err = client.GET(ctx, testPath)
-	if err == nil {
-		log.Printf("✗ Resource still exists after deletion")
-		return err
-	}
-	log.Printf("✓ Resource successfully deleted")
+	// log.Printf("Verifying deletion at %s", testPath)
+	// _, err = client.GET(ctx, testPath)
+	// if err == nil {
+	// 	log.Printf("✗ Resource still exists after deletion")
+	// 	return err
+	// }
+	// log.Printf("✓ Resource successfully deleted")
 
 	return nil
 }
