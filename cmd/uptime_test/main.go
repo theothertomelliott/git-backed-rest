@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"log"
+	"math/big"
 	"time"
 
 	"github.com/theothertomelliott/git-backed-rest/client"
@@ -15,13 +17,18 @@ func main() {
 	// Parse command line flags
 	repetitionsPerMinute := flag.Int("repetitions", 1, "Number of repetitions per minute")
 	duration := flag.Duration("duration", time.Hour, "How long to run the test")
+	fileSizeKB := flag.Int("filesize", 50, "File size in kilobytes for generated content")
 	flag.Parse()
 
 	if *repetitionsPerMinute < 1 {
 		log.Fatalf("repetitions must be at least 1")
 	}
 
-	log.Printf("Starting uptime test: %d repetitions per minute for %v", *repetitionsPerMinute, *duration)
+	if *fileSizeKB < 1 {
+		log.Fatalf("file size must be at least 1KB")
+	}
+
+	log.Printf("Starting uptime test: %d repetitions per minute for %v with %dKB file size", *repetitionsPerMinute, *duration, *fileSizeKB)
 
 	// Calculate interval between repetitions
 	interval := time.Minute / time.Duration(*repetitionsPerMinute)
@@ -31,10 +38,10 @@ func main() {
 	ctx := context.Background()
 
 	// Run the uptime test
-	runUptimeTest(ctx, interval, *duration)
+	runUptimeTest(ctx, interval, *duration, *fileSizeKB)
 }
 
-func runUptimeTest(ctx context.Context, interval time.Duration, duration time.Duration) {
+func runUptimeTest(ctx context.Context, interval time.Duration, duration time.Duration, fileSizeKB int) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -48,7 +55,7 @@ func runUptimeTest(ctx context.Context, interval time.Duration, duration time.Du
 	actionCount++
 	log.Printf("=== Action #%d at %v ===", actionCount, time.Now().Format("15:04:05"))
 
-	if err := executeUserActions(ctx); err != nil {
+	if err := executeUserActions(ctx, fileSizeKB); err != nil {
 		log.Printf("Action #%d failed: %v", actionCount, err)
 	} else {
 		log.Printf("Action #%d completed successfully", actionCount)
@@ -63,7 +70,7 @@ func runUptimeTest(ctx context.Context, interval time.Duration, duration time.Du
 			actionCount++
 			log.Printf("=== Action #%d at %v ===", actionCount, time.Now().Format("15:04:05"))
 
-			if err := executeUserActions(ctx); err != nil {
+			if err := executeUserActions(ctx, fileSizeKB); err != nil {
 				log.Printf("Action #%d failed: %v", actionCount, err)
 			} else {
 				log.Printf("Action #%d completed successfully", actionCount)
@@ -72,7 +79,7 @@ func runUptimeTest(ctx context.Context, interval time.Duration, duration time.Du
 	}
 }
 
-func executeUserActions(ctx context.Context) error {
+func executeUserActions(ctx context.Context, fileSizeKB int) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
@@ -84,7 +91,8 @@ func executeUserActions(ctx context.Context) error {
 	resource2 := generateRandomResourceName()
 
 	log.Printf("Creating first resource: %s", resource1)
-	if err := c.POST(ctx, resource1, []byte(`{"type": "first", "timestamp": "`+time.Now().Format(time.RFC3339)+`"}`)); err != nil {
+	content1 := generateRandomContent(fileSizeKB)
+	if err := c.POST(ctx, resource1, content1); err != nil {
 		return fmt.Errorf("failed to create first resource: %w", err)
 	}
 
@@ -93,15 +101,17 @@ func executeUserActions(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to read first resource: %w", err)
 	}
-	log.Printf("✓ First resource content: %s", string(result))
+	log.Printf("✓ First resource size: %d bytes", len(result))
 
 	log.Printf("Updating first resource: %s", resource1)
-	if err := c.PUT(ctx, resource1, []byte(`{"type": "first", "updated": true, "timestamp": "`+time.Now().Format(time.RFC3339)+`"}`)); err != nil {
+	content1Updated := generateRandomContent(fileSizeKB)
+	if err := c.PUT(ctx, resource1, content1Updated); err != nil {
 		return fmt.Errorf("failed to update first resource: %w", err)
 	}
 
 	log.Printf("Creating second resource: %s", resource2)
-	if err := c.POST(ctx, resource2, []byte(`{"type": "second", "timestamp": "`+time.Now().Format(time.RFC3339)+`"}`)); err != nil {
+	content2 := generateRandomContent(fileSizeKB)
+	if err := c.POST(ctx, resource2, content2); err != nil {
 		return fmt.Errorf("failed to create second resource: %w", err)
 	}
 
@@ -110,7 +120,7 @@ func executeUserActions(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to read second resource: %w", err)
 	}
-	log.Printf("✓ Second resource content: %s", string(result))
+	log.Printf("✓ Second resource size: %d bytes", len(result))
 
 	log.Printf("Deleting second resource: %s", resource2)
 	if err := c.DELETE(ctx, resource2); err != nil {
@@ -127,4 +137,28 @@ func generateRandomResourceName() string {
 	babbler.Count = 3
 	babbler.Separator = "-"
 	return "/" + babbler.Babble()
+}
+
+func generateRandomContent(sizeKB int) []byte {
+	// Calculate target size in bytes
+	targetSize := sizeKB * 1024
+
+	// Define alphanumeric character set
+	alphanum := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	alphanumBytes := []byte(alphanum)
+
+	// Generate random content
+	content := make([]byte, targetSize)
+	for i := 0; i < targetSize; i++ {
+		// Generate random index for character selection
+		randomIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphanumBytes))))
+		if err != nil {
+			// Fallback to simpler random generation if crypto/rand fails
+			content[i] = alphanumBytes[i%len(alphanumBytes)]
+		} else {
+			content[i] = alphanumBytes[randomIndex.Int64()]
+		}
+	}
+
+	return content
 }
