@@ -42,16 +42,16 @@ func TestGET(t *testing.T) {
 	docPath := "doc1"
 	docContent := "content1"
 
-	_, getErr := backend.GET(ctx, docPath)
+	_, _, getErr := backend.GET(ctx, docPath)
 	if getErr != gitbackedrest.ErrNotFound {
 		t.Fatalf("expected ErrNotFound, got %v", getErr)
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
 		t.Fatal(err)
 	}
 
-	body, getErr := backend.GET(ctx, docPath)
+	_, body, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
@@ -59,7 +59,7 @@ func TestGET(t *testing.T) {
 		t.Errorf("expected body %s, got %s", docContent, string(body))
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err == nil || err != gitbackedrest.ErrConflict {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err == nil || err != gitbackedrest.ErrConflict {
 		t.Errorf("expected conflict error on post to existing path, got %v", err)
 	}
 }
@@ -88,11 +88,11 @@ func TestPOST(t *testing.T) {
 	docPath := "doc_post"
 	docContent := "content_post"
 
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
 		t.Fatal(err)
 	}
 
-	body, getErr := backend.GET(ctx, docPath)
+	_, body, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
@@ -101,7 +101,7 @@ func TestPOST(t *testing.T) {
 	}
 
 	// Try to POST again to same path
-	if err := backend.POST(ctx, docPath, []byte("different")); err != gitbackedrest.ErrConflict {
+	if _, err := backend.POST(ctx, docPath, []byte("different")); err != gitbackedrest.ErrConflict {
 		t.Errorf("expected ErrConflict, got %v", err)
 	}
 }
@@ -131,19 +131,19 @@ func TestPUT(t *testing.T) {
 	docContentPost := "content1"
 	docContentPut := "content2"
 
-	if err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
+	if _, err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
 		t.Errorf("expected not found error on put to missing path, got %v", err)
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContentPost)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContentPost)); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := backend.PUT(ctx, docPath, []byte(docContentPut)); err != nil {
+	if _, err := backend.PUT(ctx, docPath, []byte(docContentPut)); err != nil {
 		t.Fatal(err)
 	}
 
-	body, getErr := backend.GET(ctx, docPath)
+	_, body, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
@@ -176,19 +176,19 @@ func TestDELETE(t *testing.T) {
 	docPath := "doc_delete"
 	docContent := "content_delete"
 
-	if err := backend.DELETE(ctx, docPath); err != gitbackedrest.ErrNotFound {
+	if _, err := backend.DELETE(ctx, docPath); err != gitbackedrest.ErrNotFound {
 		t.Errorf("expected ErrNotFound on delete of non-existent path, got %v", err)
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := backend.DELETE(ctx, docPath); err != nil {
+	if _, err := backend.DELETE(ctx, docPath); err != nil {
 		t.Fatal(err)
 	}
 
-	_, getErr := backend.GET(ctx, docPath)
+	_, _, getErr := backend.GET(ctx, docPath)
 	if getErr != gitbackedrest.ErrNotFound {
 		t.Errorf("expected ErrNotFound after delete, got %v", getErr)
 	}
@@ -237,17 +237,17 @@ func TestPrefixIsolation(t *testing.T) {
 	content2 := "content-from-backend2"
 
 	// POST to backend1
-	if err := backend1.POST(ctx, docPath, []byte(content1)); err != nil {
+	if _, err := backend1.POST(ctx, docPath, []byte(content1)); err != nil {
 		t.Fatal(err)
 	}
 
 	// POST to backend2 with same path should succeed (different prefix)
-	if err := backend2.POST(ctx, docPath, []byte(content2)); err != nil {
+	if _, err := backend2.POST(ctx, docPath, []byte(content2)); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify isolation
-	body1, getErr := backend1.GET(ctx, docPath)
+	_, body1, getErr := backend1.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatalf("backend1.GET failed: %v", getErr)
 	}
@@ -255,7 +255,7 @@ func TestPrefixIsolation(t *testing.T) {
 		t.Errorf("backend1: expected %s, got %s", content1, string(body1))
 	}
 
-	body2, getErr := backend2.GET(ctx, docPath)
+	_, body2, getErr := backend2.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatalf("backend2.GET failed: %v", getErr)
 	}

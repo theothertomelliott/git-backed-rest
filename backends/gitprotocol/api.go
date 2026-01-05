@@ -92,7 +92,7 @@ func (b *Backend) GetEndpoint() string {
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, path string) *gitbackedrest.APIError {
+func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	if b.lockWrites {
@@ -115,31 +115,31 @@ func (b *Backend) DELETE(ctx context.Context, path string) *gitbackedrest.APIErr
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
 		if errors.Is(err, gitbackedrest.ErrNotFound) {
-			return gitbackedrest.ErrNotFound
+			return ctx, gitbackedrest.ErrNotFound
 		}
 		fmt.Println("Error:", err)
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, path string) ([]byte, *gitbackedrest.APIError) {
+func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	result, err := b.simpleGET(ctx, path)
 	if err != nil {
-		return nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.ErrInternalServerError
 	}
 	if result == nil {
-		return nil, gitbackedrest.ErrNotFound
+		return ctx, nil, gitbackedrest.ErrNotFound
 	}
-	return result, nil
+	return ctx, result, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	if b.lockWrites {
@@ -161,17 +161,17 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) *gitbacked
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
 		if errors.Is(err, gitbackedrest.ErrConflict) {
-			return gitbackedrest.ErrConflict
+			return ctx, gitbackedrest.ErrConflict
 		}
 		fmt.Println("Error:", err)
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	if b.lockWrites {
@@ -194,13 +194,13 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) *gitbackedr
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
 		if errors.Is(err, gitbackedrest.ErrNotFound) {
-			return gitbackedrest.ErrNotFound
+			return ctx, gitbackedrest.ErrNotFound
 		}
 		fmt.Println("Error:", err)
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 }
 
 func (b *Backend) Close() error {

@@ -47,23 +47,23 @@ func TestGet(t *testing.T) {
 	ctx, task = trace.NewTask(ctx, "TestGET")
 	defer task.End()
 
-	_, getErr := backend.GET(ctx, docPath)
+	_, _, getErr := backend.GET(ctx, docPath)
 	if getErr != gitbackedrest.ErrNotFound {
 		t.Fatal(getErr)
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
 		t.Fatal(err)
 	}
 
-	body, getErr := backend.GET(ctx, docPath)
+	_, body, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
 	if string(body) != docContent {
 		t.Errorf("expected body %s, got %s", docContent, string(body))
 	}
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err == nil || err != gitbackedrest.ErrConflict {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err == nil || err != gitbackedrest.ErrConflict {
 		t.Errorf("expected conflict error on post to existing path, got %v", err)
 	}
 }
@@ -93,19 +93,19 @@ func TestPut(t *testing.T) {
 	docContentPost := "content1"
 	docContentPut := "content2"
 
-	if err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
+	if _, err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
 		t.Errorf("expected not found error on put to missing path, got %v", err)
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContentPost)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContentPost)); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := backend.PUT(ctx, docPath, []byte(docContentPut)); err != nil {
+	if _, err := backend.PUT(ctx, docPath, []byte(docContentPut)); err != nil {
 		t.Fatal(err)
 	}
 
-	body, getErr := backend.GET(ctx, docPath)
+	_, body, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}

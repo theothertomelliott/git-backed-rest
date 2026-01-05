@@ -62,8 +62,8 @@ func NewBackend(cfg Config) (*Backend, error) {
 	}
 
 	client := s3.NewFromConfig(aws.Config{
-		Region:      cfg.Region,
-		Credentials: credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+		Region:       cfg.Region,
+		Credentials:  credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 		BaseEndpoint: aws.String(cfg.Endpoint),
 	})
 
@@ -83,7 +83,7 @@ func (b *Backend) buildKey(p string) string {
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, p string) ([]byte, *gitbackedrest.APIError) {
+func (b *Backend) GET(ctx context.Context, p string) (context.Context, []byte, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	key := b.buildKey(p)
@@ -97,9 +97,9 @@ func (b *Backend) GET(ctx context.Context, p string) ([]byte, *gitbackedrest.API
 	if err != nil {
 		var noSuchKey *types.NoSuchKey
 		if errors.As(err, &noSuchKey) {
-			return nil, gitbackedrest.ErrNotFound
+			return ctx, nil, gitbackedrest.ErrNotFound
 		}
-		return nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.ErrInternalServerError
 	}
 	defer result.Body.Close()
 
@@ -107,14 +107,14 @@ func (b *Backend) GET(ctx context.Context, p string) ([]byte, *gitbackedrest.API
 	body, err := io.ReadAll(result.Body)
 	reg.End()
 	if err != nil {
-		return nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.ErrInternalServerError
 	}
 
-	return body, nil
+	return ctx, body, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, p string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) POST(ctx context.Context, p string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	key := b.buildKey(p)
@@ -127,14 +127,11 @@ func (b *Backend) POST(ctx context.Context, p string, body []byte) *gitbackedres
 	})
 	reg.End()
 	if err == nil {
-		// Object exists
-		return gitbackedrest.ErrConflict
+		return ctx, gitbackedrest.ErrConflict
 	}
-
 	var notFound *types.NotFound
 	if !errors.As(err, &notFound) {
-		// Some other error occurred
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	// Object doesn't exist, create it
@@ -146,14 +143,14 @@ func (b *Backend) POST(ctx context.Context, p string, body []byte) *gitbackedres
 	})
 	reg.End()
 	if err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, p string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) PUT(ctx context.Context, p string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	key := b.buildKey(p)
@@ -168,9 +165,9 @@ func (b *Backend) PUT(ctx context.Context, p string, body []byte) *gitbackedrest
 	if err != nil {
 		var notFound *types.NotFound
 		if errors.As(err, &notFound) {
-			return gitbackedrest.ErrNotFound
+			return ctx, gitbackedrest.ErrNotFound
 		}
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	// Object exists, update it
@@ -182,14 +179,14 @@ func (b *Backend) PUT(ctx context.Context, p string, body []byte) *gitbackedrest
 	})
 	reg.End()
 	if err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, p string) *gitbackedrest.APIError {
+func (b *Backend) DELETE(ctx context.Context, p string) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	key := b.buildKey(p)
@@ -204,9 +201,9 @@ func (b *Backend) DELETE(ctx context.Context, p string) *gitbackedrest.APIError 
 	if err != nil {
 		var notFound *types.NotFound
 		if errors.As(err, &notFound) {
-			return gitbackedrest.ErrNotFound
+			return ctx, gitbackedrest.ErrNotFound
 		}
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	// Object exists, delete it
@@ -217,10 +214,10 @@ func (b *Backend) DELETE(ctx context.Context, p string) *gitbackedrest.APIError 
 	})
 	reg.End()
 	if err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 }
 
 // Close cleans up resources (currently no-op but allows for future cleanup)

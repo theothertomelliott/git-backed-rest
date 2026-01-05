@@ -47,16 +47,16 @@ func TestGet(t *testing.T) {
 	ctx, task = trace.NewTask(ctx, "TestGET")
 	defer task.End()
 
-	_, getErr := backend.GET(ctx, docPath)
+	_, _, getErr := backend.GET(ctx, docPath)
 	if getErr != gitbackedrest.ErrNotFound {
 		t.Fatal(getErr)
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
 		t.Fatal(err)
 	}
 
-	body, getErr := backend.GET(ctx, docPath)
+	_, body, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
@@ -64,7 +64,7 @@ func TestGet(t *testing.T) {
 		t.Errorf("expected body %s, got %s", docContent, string(body))
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err == nil || err != gitbackedrest.ErrConflict {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err == nil || err != gitbackedrest.ErrConflict {
 		t.Errorf("expected conflict error on post to existing path, got %v", err)
 	}
 }
@@ -96,7 +96,7 @@ func TestGetPreexisting(t *testing.T) {
 	ctx, task = trace.NewTask(ctx, "TestGETPreexisting")
 	defer task.End()
 
-	_, getErr := backend.GET(ctx, docPath)
+	_, _, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
@@ -124,22 +124,22 @@ func TestPut(t *testing.T) {
 	docContentPut := "content2"
 
 	t.Log("First PUT - should fail")
-	if err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
+	if _, err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
 		t.Errorf("expected not found error on put to missing path, got %v", err)
 	}
 
 	t.Log("POST")
-	if err := backend.POST(ctx, docPath, []byte(docContentPost)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContentPost)); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Log("Second PUT - should succeed")
-	if err := backend.PUT(ctx, docPath, []byte(docContentPut)); err != nil {
+	if _, err := backend.PUT(ctx, docPath, []byte(docContentPut)); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Log("GET for confirmation")
-	body, getErr := backend.GET(ctx, docPath)
+	_, body, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
@@ -176,16 +176,16 @@ func TestDelete(t *testing.T) {
 	ctx, task = trace.NewTask(ctx, "TestDelete")
 	defer task.End()
 
-	_, getErr := backend.GET(ctx, docPath)
+	_, _, getErr := backend.GET(ctx, docPath)
 	if getErr != gitbackedrest.ErrNotFound {
 		t.Fatal(getErr)
 	}
 
-	if err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
+	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
 		t.Fatal(err)
 	}
 
-	body, getErr := backend.GET(ctx, docPath)
+	_, body, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
@@ -193,11 +193,11 @@ func TestDelete(t *testing.T) {
 		t.Errorf("expected body %s, got %s", docContent, string(body))
 	}
 
-	if err := backend.DELETE(ctx, docPath); err != nil {
+	if _, err := backend.DELETE(ctx, docPath); err != nil {
 		t.Fatal(err)
 	}
 
-	_, getErr = backend.GET(ctx, docPath)
+	_, _, getErr = backend.GET(ctx, docPath)
 	if getErr != gitbackedrest.ErrNotFound {
 		t.Fatal(getErr)
 	}

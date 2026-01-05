@@ -19,12 +19,18 @@ var (
 	RequestCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "request_count",
 		Help: "Total number of requests",
-	}, []string{"method", "status"})
+	}, []string{"method", "status", "retry"})
 
 	// RequestDuration tracks how long requests take
 	RequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name: "request_duration",
 		Help: "Duration of requests in seconds",
+	}, []string{"method", "status", "retry"})
+
+	// RetryCount tracks the number of retry attempts
+	RetryCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "retry_count",
+		Help: "Total number of retry attempts",
 	}, []string{"method", "status"})
 )
 
@@ -47,11 +53,18 @@ func NewMetricsUpdater() *MetricsUpdater {
 
 // UpdateUptime updates the uptime metric
 func (m *MetricsUpdater) UpdateUptime() {
+	if m == nil {
+		return
+	}
+
 	uptime := time.Since(m.startTime).Seconds()
 	ServerUptime.WithLabelValues(m.startTime.Format(time.RFC3339)).Set(uptime)
 }
 
 // GetStartTime returns the server start time
 func (m *MetricsUpdater) GetStartTime() time.Time {
+	if m == nil {
+		return time.Time{}
+	}
 	return m.startTime
 }
