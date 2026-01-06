@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/grafana/pyroscope-go"
 	gitbackedrest "github.com/theothertomelliott/git-backed-rest"
 	"github.com/theothertomelliott/git-backed-rest/backends/gitprotocol"
 	"github.com/theothertomelliott/git-backed-rest/backends/memory"
@@ -13,6 +14,28 @@ import (
 )
 
 func main() {
+	// Start Pyroscope profiling
+	pyroscopeAddress := getEnv("PYROSCOPE_ADDRESS", "http://localhost:4040")
+	if pyroscopeAddress != "" {
+		log.Printf("Starting Pyroscope profiling to %s", pyroscopeAddress)
+
+		_, err := pyroscope.Start(pyroscope.Config{
+			ApplicationName: "git-backed-rest",
+			ServerAddress:   pyroscopeAddress,
+			// You can provide profiling tags, but we'll skip for now
+			// ProfileTypes: []pyroscope.ProfileType{
+			// 	pyroscope.ProfileCPU,
+			// 	pyroscope.ProfileAllocObjects,
+			// 	pyroscope.ProfileAllocSpace,
+			// 	pyroscope.ProfileInuseObjects,
+			// 	pyroscope.ProfileInuseSpace,
+			// },
+		})
+		if err != nil {
+			log.Printf("Failed to start Pyroscope: %v", err)
+		}
+	}
+
 	// Get configuration from environment variables
 	port := getEnv("PORT", "8080")
 	backendType := getEnv("BACKEND_TYPE", "memory")

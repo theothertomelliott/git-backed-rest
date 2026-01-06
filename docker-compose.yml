@@ -12,6 +12,9 @@ services:
       - PORT=${PORT:-8080}
       - BACKEND_TYPE=${BACKEND_TYPE:-memory}
       
+      # Pyroscope configuration
+      - PYROSCOPE_ADDRESS=http://pyroscope:4040
+      
       # Git backend configuration
       - GIT_REPO_URL=${GIT_REPO_URL}
       - TEST_GITHUB_ORG=${TEST_GITHUB_ORG}
@@ -50,6 +53,7 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_INSTALL_PLUGINS=grafana-pyroscope-datasource
     volumes:
       - ./monitoring/data/grafana:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
@@ -58,6 +62,21 @@ services:
       - monitoring
     depends_on:
       - prometheus
+      - pyroscope
+    restart: unless-stopped
+
+  pyroscope:
+    image: grafana/pyroscope:latest
+    ports:
+      - "4040:4040"
+    command:
+      - server
+      - --storage-path=/data
+      - --api-bind-addr=0.0.0.0:4040
+    volumes:
+      - ./monitoring/data/pyroscope:/data
+    networks:
+      - monitoring
     restart: unless-stopped
 
 networks:
