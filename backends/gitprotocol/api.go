@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime/trace"
 	"sync"
+	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/go-git/go-git/v6/plumbing"
@@ -41,20 +42,18 @@ func NewBackendWithAuth(endpoint string, auth transport.AuthMethod) (*Backend, e
 		return nil, fmt.Errorf("getting transport: %w", err)
 	}
 
-	store := memory.NewStorage()
-
-	sess, err := c.NewSession(store, ep, auth)
-	if err != nil {
-		return nil, err
-	}
-
 	b := &Backend{
 		endpoint:   endpoint,
-		transport:  c,
-		ep:         ep,
-		store:      store,
-		session:    sess,
+		auth:       auth,
 		lockWrites: true,
+
+		ep:        ep,
+		transport: c,
+	}
+
+	err = b.newSession()
+	if err != nil {
+		return nil, fmt.Errorf("new session: %w", err)
 	}
 
 	// Create connections to warm up the transport
@@ -74,16 +73,50 @@ func NewBackendWithAuth(endpoint string, auth transport.AuthMethod) (*Backend, e
 
 type Backend struct {
 	endpoint string
+	auth     transport.AuthMethod
 
 	transport transport.Transport
 	ep        *transport.Endpoint
 	storeMtx  sync.Mutex
 	store     *memory.Storage
 
-	session transport.Session
+	session    transport.Session
+	sessionMtx sync.RWMutex
 
 	writeMtx   sync.Mutex
 	lockWrites bool
+}
+
+func (b *Backend) newSession() error {
+	b.sessionMtx.Lock()
+	defer b.sessionMtx.Unlock()
+
+	store := memory.NewStorage()
+
+	sess, err := b.transport.NewSession(store, b.ep, b.auth)
+	if err != nil {
+		return err
+	}
+
+	b.store = store
+	b.session = sess
+
+	go func() {
+		// Clean up objects every 10s
+		for range time.Tick(10 * time.Second) {
+			b.sessionMtx.Lock()
+
+			b.store.ObjectStorage.Objects = make(map[plumbing.Hash]plumbing.EncodedObject)
+			b.store.ObjectStorage.Commits = make(map[plumbing.Hash]plumbing.EncodedObject)
+			b.store.ObjectStorage.Trees = make(map[plumbing.Hash]plumbing.EncodedObject)
+			b.store.ObjectStorage.Blobs = make(map[plumbing.Hash]plumbing.EncodedObject)
+			b.store.ObjectStorage.Tags = make(map[plumbing.Hash]plumbing.EncodedObject)
+
+			b.sessionMtx.Unlock()
+		}
+	}()
+
+	return nil
 }
 
 // GetEndpoint returns the endpoint used by the backend.
@@ -94,6 +127,9 @@ func (b *Backend) GetEndpoint() string {
 // DELETE implements gitbackedrest.APIBackend.
 func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "DELETE").End()
+
+	b.sessionMtx.RLock()
+	defer b.sessionMtx.RUnlock()
 
 	if b.lockWrites {
 		b.writeMtx.Lock()
@@ -128,6 +164,9 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gi
 func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "GET").End()
 
+	b.sessionMtx.RLock()
+	defer b.sessionMtx.RUnlock()
+
 	result, err := b.simpleGET(ctx, path)
 	if err != nil {
 		return ctx, nil, gitbackedrest.ErrInternalServerError
@@ -141,6 +180,9 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 // POST implements gitbackedrest.APIBackend.
 func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "POST").End()
+
+	b.sessionMtx.RLock()
+	defer b.sessionMtx.RUnlock()
 
 	if b.lockWrites {
 		b.writeMtx.Lock()
@@ -176,6 +218,9 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 // PUT implements gitbackedrest.APIBackend.
 func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "PUT").End()
+
+	b.sessionMtx.RLock()
+	defer b.sessionMtx.RUnlock()
 
 	if b.lockWrites {
 		b.writeMtx.Lock()
