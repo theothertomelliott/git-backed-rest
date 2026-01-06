@@ -153,6 +153,9 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 			if err == gitbackedrest.ErrConflict {
 				return plumbing.ZeroHash, backoff.Permanent(gitbackedrest.ErrConflict)
 			}
+			if err == gitbackedrest.ErrInternalServerError {
+				return plumbing.ZeroHash, backoff.Permanent(gitbackedrest.ErrInternalServerError)
+			}
 			return plumbing.ZeroHash, err
 		}
 		return commit, nil
