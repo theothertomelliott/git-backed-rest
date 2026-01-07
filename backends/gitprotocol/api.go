@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
-	"runtime/debug"
 	"runtime/trace"
 	"sync"
 	"time"
@@ -104,12 +102,6 @@ func (b *Backend) newSession() error {
 	b.session = sess
 
 	go func() {
-		// Set aggressive GC for this backend
-		debug.SetGCPercent(50) // More aggressive than default 100
-
-		// Set soft memory limit (e.g., 200MB)
-		debug.SetMemoryLimit(200 * 1024 * 1024)
-
 		// Clean up objects every 10s
 		for range time.Tick(10 * time.Second) {
 			b.sessionMtx.Lock()
@@ -123,14 +115,6 @@ func (b *Backend) newSession() error {
 
 			b.sessionMtx.Unlock()
 
-			// Force garbage collection after cleanup
-			runtime.GC()
-
-			// Log memory usage for debugging
-			var m runtime.MemStats
-			runtime.ReadMemStats(&m)
-			fmt.Printf("Memory after cleanup - HeapAlloc: %d KB, HeapSys: %d KB\n",
-				m.HeapAlloc/1024, m.HeapSys/1024)
 		}
 	}()
 
