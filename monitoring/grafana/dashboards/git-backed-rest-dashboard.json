@@ -317,7 +317,7 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -346,13 +346,13 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "rate(process_cpu_seconds_total{job=\"git-backed-rest\"}[5m]) * 100",
+          "expr": "rate(process_cpu_seconds_total{job=\"git-backed-rest\"}[5m])",
           "interval": "",
-          "legendFormat": "CPU Usage %",
+          "legendFormat": "CPU Seconds/sec",
           "refId": "A"
         }
       ],
-      "title": "CPU Utilization",
+      "title": "CPU Usage",
       "type": "timeseries"
     },
     {
