@@ -13,8 +13,8 @@ services:
       - BACKEND_TYPE=${BACKEND_TYPE:-memory}
       
       # Memory management
-      - GOGC=${GOGC:-30}
-      - GOMEMLIMIT=${GOMEMLIMIT:-200MiB}
+      - GOGC=${GOGC}
+      - GOMEMLIMIT=${GOMEMLIMIT}
       
       # Pyroscope configuration
       - PYROSCOPE_ADDRESS=http://pyroscope:4040
