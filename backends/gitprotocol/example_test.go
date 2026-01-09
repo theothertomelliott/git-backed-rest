@@ -28,7 +28,7 @@ func Example() {
 
 	// Use the backend
 	ctx := context.Background()
-	content, apiErr := backend.GET(ctx, "path/to/file")
+	_, content, apiErr := backend.GET(ctx, "path/to/file")
 	if apiErr != nil {
 		log.Fatal(apiErr)
 	}
@@ -45,7 +45,7 @@ func Example_publicRepo() {
 	defer backend.Close()
 
 	ctx := context.Background()
-	content, apiErr := backend.GET(ctx, "README.md")
+	_, content, apiErr := backend.GET(ctx, "README.md")
 	if apiErr != nil {
 		log.Fatal(apiErr)
 	}

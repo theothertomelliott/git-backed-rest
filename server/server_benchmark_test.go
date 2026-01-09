@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bytes"
@@ -24,7 +24,7 @@ func BenchmarkInMemoryServer(b *testing.B) {
 	req.Body = io.NopCloser(bytes.NewBufferString("blank"))
 
 	resp := httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	for i := 0; i < b.N; i++ {
 		req, err = http.NewRequest("PUT", "/doc1", nil)
@@ -32,12 +32,12 @@ func BenchmarkInMemoryServer(b *testing.B) {
 			b.Fatal(err)
 		}
 		req.Body = io.NopCloser(bytes.NewBufferString(fmt.Sprintf("content%v", i)))
-		server.handleRequest(resp, req)
+		server.HandleRequest(resp, req)
 
 		req, err = http.NewRequest("GET", "/doc1", nil)
 		if err != nil {
 			b.Fatal(err)
 		}
-		server.handleRequest(resp, req)
+		server.HandleRequest(resp, req)
 	}
 }

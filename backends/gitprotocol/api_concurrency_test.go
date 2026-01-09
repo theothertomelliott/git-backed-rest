@@ -42,13 +42,12 @@ func TestConcurrentAccessNoLock(t *testing.T) {
 
 			start := time.Now()
 
-			err := backend.POST(ctx, fname(i), fmt.Appendf(nil, "content%d", i))
-			if err != nil {
+			if _, err := backend.POST(ctx, fname(i), fmt.Appendf(nil, "content%d", i)); err != nil {
 				t.Errorf("%d: Error on POST: %v", i, err)
 				return
 			}
 
-			content, err := backend.GET(ctx, fname(i))
+			_, content, err := backend.GET(ctx, fname(i))
 			if err != nil {
 				t.Errorf("%d: Error on GET: %v", i, err)
 				return
@@ -67,7 +66,7 @@ func TestConcurrentAccessNoLock(t *testing.T) {
 	t.Log("Verifying with GETs")
 
 	for i := range 10 {
-		content, err := backend.GET(ctx, fname(i))
+		_, content, err := backend.GET(ctx, fname(i))
 		if err != nil {
 			t.Errorf("%d: Error on GET: %v", i, err)
 		}
@@ -111,13 +110,12 @@ func TestConcurrentAccessWithLock(t *testing.T) {
 
 			start := time.Now()
 
-			err := backend.POST(ctx, fname(i), []byte(fmt.Sprintf("content%d", i)))
-			if err != nil {
+			if _, err := backend.POST(ctx, fname(i), []byte(fmt.Sprintf("content%d", i))); err != nil {
 				t.Errorf("%d: Error on POST: %v", i, err)
 				return
 			}
 
-			content, err := backend.GET(ctx, fname(i))
+			_, content, err := backend.GET(ctx, fname(i))
 			if err != nil {
 				t.Errorf("%d: Error on GET: %v", i, err)
 				return
@@ -136,7 +134,7 @@ func TestConcurrentAccessWithLock(t *testing.T) {
 	t.Log("Verifying with GETs")
 
 	for i := 0; i < 10; i++ {
-		content, err := backend.GET(ctx, fname(i))
+		_, content, err := backend.GET(ctx, fname(i))
 		if err != nil {
 			t.Errorf("%d: Error on GET: %v", i, err)
 		}

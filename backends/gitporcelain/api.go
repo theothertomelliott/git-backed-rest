@@ -34,114 +34,114 @@ type Backend struct {
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, path string) *gitbackedrest.APIError {
+func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	if err := b.pull(ctx); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.ErrNotFound
 	} else if err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	} else if info.IsDir() {
-		return gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.ErrNotFound
 	}
 
 	if err := os.Remove(filePath); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("delete %s", path)); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, path string) ([]byte, *gitbackedrest.APIError) {
+func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	if err := b.pull(ctx); err != nil {
-		return nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.ErrInternalServerError
 	}
 
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return nil, gitbackedrest.ErrNotFound
+		return ctx, nil, gitbackedrest.ErrNotFound
 	} else if err != nil {
-		return nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.ErrInternalServerError
 	} else if info.IsDir() {
-		return nil, gitbackedrest.ErrNotFound
+		return ctx, nil, gitbackedrest.ErrNotFound
 	}
 
 	body, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.ErrInternalServerError
 	}
-	return body, nil
+	return ctx, body, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	if err := b.pull(ctx); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	_, err := os.Stat(filePath)
 	if err == nil {
-		return gitbackedrest.ErrConflict
+		return ctx, gitbackedrest.ErrConflict
 	}
 	if err != nil && !os.IsNotExist(err) {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	if err := os.WriteFile(filePath, body, os.ModePerm); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("write %s", path)); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	if err := b.pull(ctx); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.ErrNotFound
 	} else if err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	} else if info.IsDir() {
-		return gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.ErrNotFound
 	}
 
 	if err := os.WriteFile(filePath, body, os.ModePerm); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("write %s", path)); err != nil {
-		return gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.ErrInternalServerError
 	}
 
-	return nil
+	return ctx, nil
 
 }
 

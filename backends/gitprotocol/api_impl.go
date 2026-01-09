@@ -23,6 +23,8 @@ import (
 )
 
 func (b *Backend) simpleGET(ctx context.Context, path string) ([]byte, error) {
+	path = strings.TrimPrefix(path, "/")
+
 	conn, err := b.getReadConnection(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting connection: %w", err)
@@ -53,6 +55,8 @@ func (b *Backend) simpleGET(ctx context.Context, path string) ([]byte, error) {
 }
 
 func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, mustNotExist bool) (plumbing.Hash, error) {
+	path = strings.TrimPrefix(path, "/")
+
 	conn, err := b.getReadConnection(ctx)
 	if err != nil {
 		return plumbing.ZeroHash, fmt.Errorf("getting connection: %w", err)
@@ -102,11 +106,11 @@ func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, must
 	}
 
 	// Push the new commit
-	if err := b.pushCommit(ctx, mainHash, newCommitHash, "main"); err != nil {
+	if err := b.pushCommit(ctx, mainHash, newCommitHash, blobHash, "main"); err != nil {
 		if errors.Is(err, gitbackedrest.ErrConflict) {
 			return plumbing.ZeroHash, gitbackedrest.ErrConflict
 		}
-		if strings.Contains(err.Error(), "malformed unpack status") {
+		if strings.Contains(err.Error(), "malformed unpack status") || strings.Contains(err.Error(), "encoding packfile") {
 			return plumbing.ZeroHash, gitbackedrest.ErrInternalServerError
 		}
 		return plumbing.ZeroHash, fmt.Errorf("pushing commit: %w", err)
@@ -421,7 +425,7 @@ func (b *Backend) createCommit(ctx context.Context, parentHash, treeHash plumbin
 }
 
 // pushCommit pushes a commit to the remote repository
-func (b *Backend) pushCommit(ctx context.Context, oldHash, commitHash plumbing.Hash, branchName string) error {
+func (b *Backend) pushCommit(ctx context.Context, oldHash, commitHash, changedFileHash plumbing.Hash, branchName string) error {
 	defer trace.StartRegion(ctx, "pushCommit").End()
 	conn, err := b.getWriteConnection(ctx)
 	if err != nil {
@@ -432,7 +436,7 @@ func (b *Backend) pushCommit(ctx context.Context, oldHash, commitHash plumbing.H
 	refName := plumbing.NewBranchReferenceName(branchName)
 
 	// Build packfile with new objects
-	packfileReader, err := b.buildPackfile(commitHash)
+	packfileReader, err := b.buildPackfile(commitHash, changedFileHash)
 	if err != nil {
 		return fmt.Errorf("building packfile: %w", err)
 	}
@@ -462,7 +466,7 @@ func (b *Backend) pushCommit(ctx context.Context, oldHash, commitHash plumbing.H
 }
 
 // buildPackfile creates a packfile containing all objects reachable from newCommit but not from oldCommit
-func (b *Backend) buildPackfile(newCommit plumbing.Hash) (io.ReadCloser, error) {
+func (b *Backend) buildPackfile(newCommit, changedFileHash plumbing.Hash) (io.ReadCloser, error) {
 	// Use packfile encoder to build the packfile
 	pr, pw := io.Pipe()
 
@@ -479,10 +483,16 @@ func (b *Backend) buildPackfile(newCommit plumbing.Hash) (io.ReadCloser, error) 
 		objects := make([]plumbing.Hash, 0)
 
 		// Walk the new commit tree to collect all objects
-		err := b.walkCommit(newCommit, func(hash plumbing.Hash) error {
+		err := b.walkCommit(newCommit, changedFileHash, func(hash plumbing.Hash) error {
 			objects = append(objects, hash)
 			return nil
 		})
+
+		for _, hash := range objects {
+			if hash == changedFileHash {
+				fmt.Println("Found changed file hash", hash)
+			}
+		}
 
 		if err != nil {
 			pw.CloseWithError(fmt.Errorf("walking commit: %w", err))
@@ -500,7 +510,7 @@ func (b *Backend) buildPackfile(newCommit plumbing.Hash) (io.ReadCloser, error) 
 }
 
 // walkCommit walks all objects reachable from newCommit but not from oldCommit
-func (b *Backend) walkCommit(commit plumbing.Hash, fn func(plumbing.Hash) error) error {
+func (b *Backend) walkCommit(commit, modifiedFileHash plumbing.Hash, fn func(plumbing.Hash) error) error {
 	// Note: the caller handles locking here
 
 	// Add the new commit
@@ -520,7 +530,7 @@ func (b *Backend) walkCommit(commit plumbing.Hash, fn func(plumbing.Hash) error)
 	}
 
 	// Walk the tree
-	if err := b.walkTree(decodedCommit.TreeHash, fn); err != nil {
+	if err := b.walkTree(decodedCommit.TreeHash, modifiedFileHash, fn); err != nil {
 		return err
 	}
 
@@ -528,7 +538,7 @@ func (b *Backend) walkCommit(commit plumbing.Hash, fn func(plumbing.Hash) error)
 }
 
 // walkTree walks all objects in a tree recursively
-func (b *Backend) walkTree(treeHash plumbing.Hash, fn func(plumbing.Hash) error) error {
+func (b *Backend) walkTree(treeHash, modifiedFileHash plumbing.Hash, fn func(plumbing.Hash) error) error {
 	// Note: the caller handles locking here
 
 	// Add the tree itself
@@ -550,18 +560,16 @@ func (b *Backend) walkTree(treeHash plumbing.Hash, fn func(plumbing.Hash) error)
 
 	// Walk all entries
 	for _, entry := range tree.Entries {
-		if entry.Mode.IsFile() {
-			// It's a blob - only include if in our store
+		if entry.Mode.IsFile() && entry.Hash == modifiedFileHash {
 			_, err := b.store.EncodedObject(plumbing.BlobObject, entry.Hash)
 			if err == nil {
-				// Blob is in our store
 				if err := fn(entry.Hash); err != nil {
 					return err
 				}
 			}
 		} else if entry.Mode == filemode.Dir {
 			// It's a subtree - recurse
-			if err := b.walkTree(entry.Hash, fn); err != nil {
+			if err := b.walkTree(entry.Hash, modifiedFileHash, fn); err != nil {
 				return err
 			}
 		}

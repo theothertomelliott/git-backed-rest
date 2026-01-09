@@ -18,33 +18,33 @@ type Backend struct {
 	data map[string][]byte
 }
 
-func (b *Backend) GET(ctx context.Context, path string) ([]byte, *gitbackedrest.APIError) {
+func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, *gitbackedrest.APIError) {
 	if value, ok := b.data[path]; ok {
-		return value, nil
+		return ctx, value, nil
 	}
-	return nil, gitbackedrest.ErrNotFound
+	return ctx, nil, gitbackedrest.ErrNotFound
 }
 
-func (b *Backend) POST(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	if _, ok := b.data[path]; ok {
-		return gitbackedrest.ErrConflict
+		return ctx, gitbackedrest.ErrConflict
 	}
 	b.data[path] = body
-	return nil
+	return ctx, nil
 }
 
-func (b *Backend) PUT(ctx context.Context, path string, body []byte) *gitbackedrest.APIError {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
 	if _, ok := b.data[path]; !ok {
-		return gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.ErrNotFound
 	}
 	b.data[path] = body
-	return nil
+	return ctx, nil
 }
 
-func (b *Backend) DELETE(ctx context.Context, path string) *gitbackedrest.APIError {
+func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gitbackedrest.APIError) {
 	if _, ok := b.data[path]; !ok {
-		return gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.ErrNotFound
 	}
 	delete(b.data, path)
-	return nil
+	return ctx, nil
 }

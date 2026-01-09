@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bytes"
@@ -21,18 +21,18 @@ func TestServerGET(t *testing.T) {
 	}
 
 	resp := httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusNotFound {
 		t.Errorf("expected status code %d, got %d", http.StatusNotFound, resp.Code)
 	}
 
-	if err := server.backend.POST(req.Context(), "/doc1", []byte("content1")); err != nil {
+	if _, err := server.backend.POST(req.Context(), "/doc1", []byte("content1")); err != nil {
 		t.Fatal(err)
 	}
 
 	resp = httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusOK {
 		t.Errorf("expected status code %d, got %d", http.StatusOK, resp.Code)
@@ -51,14 +51,14 @@ func TestServerPOST(t *testing.T) {
 	req.Body = io.NopCloser(bytes.NewBufferString("content1"))
 
 	resp := httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusCreated {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusCreated, resp.Code, resp.Body)
 	}
 
 	resp = httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusConflict {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusConflict, resp.Code, resp.Body)
@@ -77,7 +77,7 @@ func TestServerPUT(t *testing.T) {
 	req.Body = io.NopCloser(bytes.NewBufferString("content2"))
 
 	resp := httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusNotFound {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusNotFound, resp.Code, resp.Body)
@@ -90,7 +90,7 @@ func TestServerPUT(t *testing.T) {
 	req.Body = io.NopCloser(bytes.NewBufferString("content1"))
 
 	resp = httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusCreated {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusCreated, resp.Code, resp.Body)
@@ -101,7 +101,7 @@ func TestServerPUT(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp = httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusOK {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusOK, resp.Code, resp.Body)
@@ -117,7 +117,7 @@ func TestServerPUT(t *testing.T) {
 	req.Body = io.NopCloser(bytes.NewBufferString("content2"))
 
 	resp = httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusNoContent {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusNoContent, resp.Code, resp.Body)
@@ -128,7 +128,7 @@ func TestServerPUT(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp = httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusOK {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusOK, resp.Code, resp.Body)
@@ -149,7 +149,7 @@ func TestServerDELETE(t *testing.T) {
 	}
 
 	resp := httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusNotFound {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusNotFound, resp.Code, resp.Body)
@@ -162,7 +162,7 @@ func TestServerDELETE(t *testing.T) {
 	req.Body = io.NopCloser(bytes.NewBufferString("content1"))
 
 	resp = httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusCreated {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusCreated, resp.Code, resp.Body)
@@ -174,7 +174,7 @@ func TestServerDELETE(t *testing.T) {
 	}
 
 	resp = httptest.NewRecorder()
-	server.handleRequest(resp, req)
+	server.HandleRequest(resp, req)
 
 	if resp.Code != http.StatusNoContent {
 		t.Errorf("expected status code %d, got %d: %v", http.StatusNoContent, resp.Code, resp.Body)
