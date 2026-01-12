@@ -1,7 +1,7 @@
 ---
 # try also 'default' to start simple
 theme: default
-background: images/pexels-element5-1370294.jpg
+background: images/part1/cover.jpg
 # some information about your slides (markdown enabled)
 title: Can Git Replace S3?
 info: |
@@ -13,6 +13,8 @@ info: |
 class: text-center
 # enable MDC Syntax: https://sli.dev/features/mdc
 mdc: true
+# force color schema for the slides, can be 'auto', 'light', or 'dark'
+colorSchema: dark
 ---
 
 # Can you use Git to replace S3?
@@ -35,31 +37,13 @@ The last comment block of each slide will be treated as slide notes. It will be 
 -->
 
 ---
+layout: image-right
+image: images/intro/tom.jpg
+---
 
 # About me
 
-<!--
-Hi everyone, I'm Tom, I've been using Go for the past decade, greatest longevity I've got out of any language.
-
-I recently closed down a startup I was building out, so I've been tearing down all the tech I built for parts, blog posts and talks.
-
-Today I'll be talking to you about one of those projects.
--->
-
-<QRCode
-    :width="300"
-    :height="300"
-    type="svg"
-    data="https://telliott.me"
-    :margin="10"
-    :imageOptions="{ margin: 10 }"
-/>
-
----
-
-# What we're talking about
-
-* Screenshots of the blog series
+Tom Elliott
 
 <QRCode
     :width="300"
@@ -68,6 +52,37 @@ Today I'll be talking to you about one of those projects.
     data="https://open.substack.com/pub/thefridaydeploy/p/can-git-back-a-rest-api-part-1-the?utm_campaign=post-expanded-share&utm_medium=web"
     :margin="10"
     :imageOptions="{ margin: 10 }"
+    :dotsOptions="{ color: '#000000' }"
+    :backgroundOptions="{ color: '#ffffff' }"
+/>
+
+<!--
+Hi everyone, I'm Tom, a 20 year developer, 10 year Gopher, and a failed founder.
+
+The last month or two, among some interviews, I've been doing some fun research projects, one of which I'm going to talk about today.
+-->
+
+---
+layout: two-cols-header
+---
+
+# What we're talking about
+
+::left::
+
+* Screenshots of the blog series
+
+::right::
+
+<QRCode
+    :width="300"
+    :height="300"
+    type="svg"
+    data="https://open.substack.com/pub/thefridaydeploy/p/can-git-back-a-rest-api-part-1-the?utm_campaign=post-expanded-share&utm_medium=web"
+    :margin="10"
+    :imageOptions="{ margin: 10 }"
+    :dotsOptions="{ color: '#000000' }"
+    :backgroundOptions="{ color: '#ffffff' }"
 />
 
 <!--
@@ -78,27 +93,43 @@ Today I'll be talking to you about one of those projects.
 
 ---
 
-# How I got here
+# Why would I do all this?
 
 * Working on Ocuroot, a CI tool that maintained state in Git.
-
-Why?
 
 * Enabling GitOps with automations as a default
 * Git repos are cheap and easy for most teams to set up
 * I *really* didn't want to write a database schema
 
 ---
+layout: image-right
+image: images/intro/becauseitscool.png
+---
 
-# Why is this relevant to Go?
+# The real reason
 
-* I wrote it in Go
-* Used the go-git library
+* Because it's cool
 
-Will discuss Go features that helped and hindered along the way:
+---
+layout: two-cols-header
+---
 
-* Concurrency
+# What I'll cover
+
+::left::
+
+# Git Stuff
+
+* Protocols
+* Objects & Tree structure
+
+::right::
+
+# Go Stuff
+
+* Modules I used
 * Profiling
+* Concurrency
 * Garbage collection
 
 ---
@@ -275,23 +306,14 @@ Need to pull before every read to make sure we're in sync with the remote.
 
 # Testing
 
-<div class="flex items-center justify-center">
+<div class="flex items-center justify-center text-sm mb-8">
 
-```mermaid {scale: 0.6}
-flowchart TD
-    B[GET test.json] -->|404| C[POST test.json]
-    C -->|201| D[PUT test.json]
-    D -->|204| E[DELETE test.json]
-    E -->|204| F[Pass]
-    
-    B -->|Else| G[Fail]
-    C -->|Else| G
-    D -->|Else| G
-    E -->|Else| G
-    
-    style F fill:#90EE90
-    style G fill:#FFB6C1
-```
+| Method | Path | Request Body | Code | Response Body |
+|--------|------|-------------|------|--------------|
+| <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | test.json | - | 404 | - |
+| <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | test.json | `{"name": "Alice"}` | 201 | - |
+| <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | test.json | - | 200 | `{"name": "Alice"}` |
+| <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | test.json | `{"name": "Bob"}` | 409 | - |
 
 </div>
 
@@ -303,6 +325,12 @@ $ go test ./backends/gitporcelain
 I set up a test, which felt a bit slow.
 I wanted to get a sense of what parts took the longest, so I dusted off the profiler.
 -->
+
+---
+
+# Test setup
+
+TODO: Detail configuring a GitHub repo for testing
 
 ---
 
@@ -612,11 +640,237 @@ func (b *Backend) POST(
 
 ---
 layout: cover
+background: images/part4/cover.jpg
 ---
 
 # Productionizing
 
 Making it stable
+
+---
+layout: image
+image: images/part4/grafana.png
+backgroundSize: contain
+---
+
+---
+
+# Test Sequence
+
+<div class="flex items-center justify-center text-sm mb-8">
+
+| Operation | Method | Path | Request Body | Expected Code |
+|-----------|--------|------|-------------|--------------|
+| **Create** | <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | `{random1}.json` | ~1KB fixed data | 201 |
+| **Create** | <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | `{random2}.json` | ~1KB fixed data | 201 |
+| **Read** | <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | `{random1}.json` | - | 200 |
+| **Read** | <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | `{random2}.json` | - | 200 |
+| **Update** | <span class="inline-block bg-orange-500 rounded text-white px-2 py-1 text-xs">PUT</span> | `{random1}.json` | ~1KB modified data | 204 |
+| **Delete** | <span class="inline-block bg-red-500 rounded text-white px-2 py-1 text-xs">DELETE</span> | `{random2}.json` | - | 204 |
+
+</div>
+
+---
+
+# Configurable tests
+
+```bash
+$ go run ./cmd/uptime_test -repetitions=1 -duration=2h -filesize=1024
+```
+
+<div class="flex items-center justify-center text-sm mb-8">
+
+| Parameter | Flag | Description | Example |
+|-----------|------|-------------|---------|
+| **Repetitions** | `-repetitions` | Number of test sequences per minute | `-repetitions=4` |
+| **Duration** | `-duration` | Total test run time | `-duration=10m` |
+| **File Size** | `-filesize` | Size of test data in kb | `-filesize=1024` |
+
+</div>
+
+---
+
+# Low volume run
+
+```bash
+$ go run ./cmd/uptime_test -repetitions=1 -duration=1h -filesize=1
+```
+
+![Low Volume](/images/part4/graph1.png)
+
+---
+
+# Rising memory usage
+
+Not a great sign
+
+![Low Volume](/images/part4/graph2.png)
+
+---
+
+# Bigger files, slower requests
+
+```bash
+$ go run ./cmd/uptime_test -repetitions=1 -duration=1h -filesize=1024
+```
+
+![Low Volume](/images/part4/graph3.png)
+
+---
+
+# Actually, errors!
+
+```
+2026/01/05 16:40:16 Action #54 failed: failed to delete second resource: 
+executing DELETE request: Delete "http://localhost:8080/sthenic-Mitella-batlan": 
+context deadline exceeded
+```
+
+![Low Volume](/images/part4/graph4.png)
+
+---
+
+# Let's look at a profile
+
+Added Pyroscope to the mix
+
+![Low Volume](/images/part4/profile.png)
+
+---
+
+# Too many blobs
+
+```go
+func (b *Backend) walkTree(
+  treeHash, 
+  includeHash func(plumbing.Hash) error,
+) error {
+
+...
+
+  for _, entry := range tree.Entries {
+    if entry.Mode.IsFile() {
+      // Object is a blob, include if it's in our store
+      // HERE'S THE PROBLEM
+      _, err := b.store.EncodedObject(plumbing.BlobObject, entry.Hash)
+      if err == nil {
+          includeHash(entry.Hash)
+      }
+    } else if entry.Mode == filemode.Dir {
+      // It's a subtree - recurse
+      b.walkTree(entry.Hash, includeHash)
+    }
+  }
+
+...
+
+}
+```
+
+---
+
+# We only need one blob
+
+```go
+if entry.Mode.IsFile() && entry.Hash == modifiedFileHash {
+  // Object is a blob, include if it's in our store
+  _, err := b.store.EncodedObject(plumbing.BlobObject, entry.Hash)
+  if err == nil {
+      includeHash(entry.Hash)
+  }
+} else if entry.Mode == filemode.Dir {
+...
+```
+
+---
+
+# Stable latency
+
+Tracks with file size
+
+![Low Volume](/images/part4/graph5.png)
+
+---
+
+# Runaway memory usage!
+
+No longer restricted by timeouts
+
+![Low Volume](/images/part4/graph6.png)
+
+---
+
+# Cleanup
+
+Quick and dirty - empty the store every 10 seconds
+
+```go
+go func() {
+  // Clean up objects every 10s
+  for range time.Tick(10 * time.Second) {
+    b.sessionMtx.Lock()
+
+    b.store.ObjectStorage.Objects = make(map[plumbing.Hash]plumbing.EncodedObject)
+    b.store.ObjectStorage.Commits = make(map[plumbing.Hash]plumbing.EncodedObject)
+    b.store.ObjectStorage.Trees = make(map[plumbing.Hash]plumbing.EncodedObject)
+    b.store.ObjectStorage.Blobs = make(map[plumbing.Hash]plumbing.EncodedObject)
+    b.store.ObjectStorage.Tags = make(map[plumbing.Hash]plumbing.EncodedObject)
+
+    b.sessionMtx.Unlock()
+  }
+}()
+```
+
+---
+
+# Better, but not great
+
+50% of 2GB is still 1GB
+
+![Low Volume](/images/part4/graph7.png)
+
+---
+
+# Tuning garbage collection
+
+```bash
+GOGC=50
+GOMEMLIMIT=200MiB
+```
+
+![Low Volume](/images/part4/graph8.png)
+
+---
+
+# The tradeoff
+
+Increased memory usage
+
+![Low Volume](/images/part4/graph9.png)
+
+---
+
+# What about S3?
+
+It uses less memory for sure
+
+![Low Volume](/images/part4/graph10.png)
+
+---
+
+# What about S3
+
+And less CPU
+
+![Low Volume](/images/part4/graph11.png)
+
+<!--
+I had to do a decent amount of work to get my server to this level of performance, and
+S3 still blows it out of the water.
+
+There's still some room for improvement. I could bypass the object store entirely and work more
+directly with the protocol, maybe keep the objects on the stack rather than the heap.
+-->
 
 ---
 
@@ -626,11 +880,16 @@ https://thefridaydeploy.substack.com/p/can-git-back-a-rest-api-part-4-stability
 
 ---
 layout: cover
+background: images/part5/cover.jpg
 ---
 
 # Conclusions
 
 Why would you do this?
+
+<!--
+Photo credit: Photo by Martin Lopez: https://www.pexels.com/photo/man-in-black-blazer-wearing-black-framed-eyeglasses-2399065/
+-->
 
 ---
 
