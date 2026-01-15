@@ -52,29 +52,12 @@ The last month or two, among some interviews, I've been doing some fun research 
 -->
 
 ---
-layout: two-cols-header
----
 
 # What we're talking about
+Expanding on a blog series
 
-::left::
 
-![Screenshot of the first in the series](/images/intro/blog.png)
-
-::right::
-
-<div style="padding-left: 90px; margin-top:70px;">
-<QRCode
-    :width="300"
-    :height="300"
-    type="svg"
-    data="https://open.substack.com/pub/thefridaydeploy/p/can-git-back-a-rest-api-part-1-the?utm_campaign=post-expanded-share&utm_medium=web"
-    :margin="10"
-    :imageOptions="{ margin: 10 }"
-    :dotsOptions="{ color: '#000000' }"
-    :backgroundOptions="{ color: '#ffffff' }"
-/>
-</div>
+<img src="/images/intro/blog.png" alt="Screenshot of the first in the series" style="max-width: 70%; margin: 0 auto; display: block;">
 
 <!--
 * Based on a blog series
@@ -1039,6 +1022,8 @@ Photo by Yan Krukau: https://www.pexels.com/photo/a-person-playing-the-drums-901
 Kinda.
 
 <!--
+Go uses Git protocols to work with modules.
+
 GitHub was built on top of a tool allowing Ruby to read/write Git:
 https://deepwiki.com/mojombo/grit
 https://github.com/mojombo/grit
@@ -1079,7 +1064,7 @@ layout: two-cols-header
     :width="300"
     :height="300"
     type="svg"
-    data="https://open.substack.com/pub/thefridaydeploy/p/can-git-back-a-rest-api-part-1-the?utm_campaign=post-expanded-share&utm_medium=web"
+    data="https://www.linkedin.com/in/telliott1984/"
     :margin="10"
     :imageOptions="{ margin: 10 }"
     :dotsOptions="{ color: '#000000' }"
