@@ -1,7 +1,7 @@
 ---
 # try also 'default' to start simple
 theme: default
-background: images/part1/cover.jpg
+background: /images/part1/cover.jpg
 # some information about your slides (markdown enabled)
 title: Can Git Replace S3?
 info: |
@@ -32,29 +32,18 @@ Tom Elliott - telliott.me
   </a>
 </div>
 
-<!--
-The last comment block of each slide will be treated as slide notes. It will be visible and editable in Presenter Mode along with the slide. [Read more in the docs](https://sli.dev/guide/syntax.html#notes)
--->
-
 ---
 layout: image-right
-image: images/intro/tom.jpg
+image: images/intro/profile.png
 ---
 
 # About me
 
 Tom Elliott
 
-<QRCode
-    :width="300"
-    :height="300"
-    type="svg"
-    data="https://open.substack.com/pub/thefridaydeploy/p/can-git-back-a-rest-api-part-1-the?utm_campaign=post-expanded-share&utm_medium=web"
-    :margin="10"
-    :imageOptions="{ margin: 10 }"
-    :dotsOptions="{ color: '#000000' }"
-    :backgroundOptions="{ color: '#ffffff' }"
-/>
+* 20 year developer
+* 10 year Gopher
+* Failed founder (no regrets)
 
 <!--
 Hi everyone, I'm Tom, a 20 year developer, 10 year Gopher, and a failed founder.
@@ -70,10 +59,11 @@ layout: two-cols-header
 
 ::left::
 
-* Screenshots of the blog series
+![Screenshot of the first in the series](/images/intro/blog.png)
 
 ::right::
 
+<div style="padding-left: 90px; margin-top:70px;">
 <QRCode
     :width="300"
     :height="300"
@@ -84,6 +74,7 @@ layout: two-cols-header
     :dotsOptions="{ color: '#000000' }"
     :backgroundOptions="{ color: '#ffffff' }"
 />
+</div>
 
 <!--
 * Based on a blog series
@@ -92,7 +83,17 @@ layout: two-cols-header
 -->
 
 ---
+layout: cover
+---
 
+# Why would I do this?
+
+---
+layout: image
+image: images/intro/ocuroot.png
+---
+
+<!--
 # Why would I do all this?
 
 * Working on Ocuroot, a CI tool that maintained state in Git.
@@ -100,15 +101,7 @@ layout: two-cols-header
 * Enabling GitOps with automations as a default
 * Git repos are cheap and easy for most teams to set up
 * I *really* didn't want to write a database schema
-
----
-layout: image-right
-image: images/intro/becauseitscool.png
----
-
-# The real reason
-
-* Because it's cool
+-->
 
 ---
 layout: two-cols-header
@@ -116,16 +109,23 @@ layout: two-cols-header
 
 # What I'll cover
 
+<Spacer size="2rem" />
+
 ::left::
 
-# Git Stuff
+## Git Stuff
+
+<Spacer size="1rem" />
 
 * Protocols
 * Objects & Tree structure
+* Packfiles
 
 ::right::
 
-# Go Stuff
+## Go Stuff
+
+<Spacer size="1rem" />
 
 * Modules I used
 * Profiling
@@ -134,37 +134,11 @@ layout: two-cols-header
 
 ---
 
-# Git is storage
-
-<!--
-When it comes down to it, Git is just a way of storing files.
-It does a bunch of fancy things, like versioning, branching, diffs.
-But at the end of the day, you're just putting files onto a shared server.
--->
-
----
-
-# What else is file storage?
-
-<!--
-Object storage, buckets, S3. Those are all the same thing, and I'm not sure which one I prefer.
-I'm just going to say S3, even though all my testing was done on Cloudflare's R2.
--->
-
----
-
-# What could you use git for instead of S3?
-
-* A REST API to store and retrieve one file at a time
-
-<!--
-Avoids transactions
-Simple to understand and work with.
--->
-
----
-
 # What is REST?
+
+https://www.geeksforgeeks.org/node-js/rest-api-introduction/
+
+![Screenshot of REST API introduction](/images/intro/rest-api.png)
 
 <!--
 Some of you may know what REST is, some of you may not.
@@ -175,10 +149,14 @@ But I've got 30 minutes and this slide made the cut.
 
 # HTTP Verbs
 
-* GET
-* POST
-* PUT
-* DELETE
+<Spacer size="1rem" />
+
+| Method | Description |
+|--------|-------------|
+| <span style="display: inline-block; background-color: #4caf50; color: white; padding: 0.3rem 0.8rem; border-radius: 1rem; font-weight: 600;">POST</span> | Create |
+| <span style="display: inline-block; background-color: #61dafb; color: #000; padding: 0.3rem 0.8rem; border-radius: 1rem; font-weight: 600;">GET</span> | Read |
+| <span style="display: inline-block; background-color: #ff9800; color: white; padding: 0.3rem 0.8rem; border-radius: 1rem; font-weight: 600;">PUT</span> | Update |
+| <span style="display: inline-block; background-color: #f44336; color: white; padding: 0.3rem 0.8rem; border-radius: 1rem; font-weight: 600;">DELETE</span> | Delete |
 
 <!--
 Ignoring PATCH and OPTIONS.
@@ -188,7 +166,9 @@ Ignoring PATCH and OPTIONS.
 
 # Example
 
-### Create a new user profile
+<Spacer size="2rem" />
+
+## Create a new user profile
 
 ```
 POST /users/alice/profile
@@ -197,7 +177,9 @@ Content-Type: application/json
 → 201 Created
 ```
 
-### Retrieve the profile
+<Spacer size="2rem" />
+
+## Retrieve the profile
 
 ``` 
 GET /users/alice/profile
@@ -209,7 +191,9 @@ GET /users/alice/profile
 
 # Example
 
-### Update the profile 
+<Spacer size="2rem" />
+
+## Update the profile 
 ```
 PUT /users/alice/profile
 Content-Type: application/json
@@ -217,7 +201,9 @@ Content-Type: application/json
 → 204 No Content
 ```
 
-### Delete the profile
+<Spacer size="2rem" />
+
+## Delete the profile
 
 ```
 DELETE /users/alice/profile
@@ -228,6 +214,8 @@ DELETE /users/alice/profile
 
 # The interface
 
+<Spacer size="3rem" />
+
 ```go
 type APIBackend interface {
 	GET(ctx context.Context, path string) ([]byte, error)
@@ -237,14 +225,10 @@ type APIBackend interface {
 }
 ```
 
-Compare different implementations:
-
-* Memory
-* Git
-* S3
-
 <!--
 Implement this so we can swap out with multiple backends
+
+One backend for Git, one for S3
 -->
 
 ---
@@ -257,10 +241,10 @@ background: images/part1/cover.jpg
 A naïve implementation
 
 ---
-layout: quote
----
 
 # Using the Git CLI
+
+<Spacer size="2rem" />
 
 ```go  
   cmd = exec.Command("git", "commit", "-m", message)
@@ -282,11 +266,10 @@ Clone the repo to a temp directory, read files directly for get, create and push
 -->
 
 ---
-layout: quote
----
 
 # Keeping up to date
 
+<Spacer size="2rem" />
 ```go
   cmd := exec.Command("git", "pull")
   cmd.Dir = repoPath
@@ -329,20 +312,24 @@ I wanted to get a sense of what parts took the longest, so I dusted off the prof
 ---
 
 # Test setup
+On-demand repos in a test GitHub org
 
-TODO: Detail configuring a GitHub repo for testing
-
----
-
-FELT SLUGGISH
-
-TODO: Add an image
+![Test GitHub Organization](/images/part1/test-org.png)
 
 ---
-layout: quote
+layout: image
+image: images/part1/slug.jpg
+---
+
+<!--
+Photo by Pixabay: https://www.pexels.com/photo/slug-158158/
+-->
+
 ---
 
 # Profiling
+
+<Spacer size="2rem" />
 
 ## Tasks and regions
 
@@ -354,6 +341,8 @@ defer task.End()
 
 defer trace.StartRegion(ctx, "GET").End()
 ```
+
+<Spacer size="2rem" />
 
 ## Create and view a trace
 
@@ -370,7 +359,7 @@ class: text-center
 ![Trace output](/images/part1/trace_porcelain.png)
 
 ---
-layout: center
+layout: cover
 ---
 
 # Compare to S3
@@ -445,12 +434,17 @@ Down to the protocol level
 ---
 
 # Introducing go-git
+https://github.com/go-git/go-git
 
-TODO: Screenshot of the go-git project page
+<Spacer size="1rem" />
+
+![go-git readme](/images/part2/go-git-readme.png)
 
 ---
 
 # Connecting
+
+<Spacer size="1rem" />
 
 ```go
 // Set up a transport for this endpoint
@@ -475,6 +469,8 @@ writeConn, err := sess.Handshake(ctx, transport.ReceivePackService, "")
 
 # Keeping up to date
 
+<Spacer size="2rem" />
+
 ```go
 refs, err := conn.GetRemoteRefs(ctx)
 
@@ -487,23 +483,34 @@ for _, ref := range refs {
 
 ---
 
-# Trees?
+# What's in a commit?
+
+<Spacer size="2rem" />
 
 ```
+author Tom Elliott <...> 1766439004 -0500
+committer Tom Elliott <...> 1766439004 -0500
+
+Add all files
+```
+
+<Spacer size="2rem" />
+
+<pre style="font-size: 1.2em; font-family: monospace; line-height: 1.4; background-color: #2d2d2d; color: #f8f8f2; padding: 1rem; border-radius: 4px;">
 .
 ├── dir1
 │   └── dir2
 │       └── hello2.txt
 └── hello.txt
-```
+</pre>
 
 ---
 
-# Trees!
+# Objects!
 
-It's all objects
+Commits, trees, blobs (and tags)
 
-![Tree](/images/part2/tree.png)
+<img src="/images/part2/tree.svg" alt="Tree" style="max-width: 80%; height: 80%; margin: 0 auto; display: block;">
 
 ---
 layout: image-right
@@ -527,11 +534,11 @@ err := conn.Fetch(
 
 ---
 
-# Building a commit
+# Packfiles
+Zip up changes
 
-TODO: Constructing a commit object, but only including the relevant pieces
+<img src="/images/part2/packfile.svg" alt="Packfile" style="max-width: 80%; height: 80%; margin: 0 auto; display: block;">
 
-Zipping into a packfile
 
 ---
 layout: cover
@@ -613,12 +620,19 @@ _, err := backoff.Retry(
 ```
 
 ---
+layout: image
+image: images/part1/slug.jpg
+---
 
-# This can be slow
+<!--
+Photo by Pixabay: https://www.pexels.com/photo/slug-158158/
+-->
 
 ---
 
 # Locking
+
+<Spacer size="1rem" />
 
 ```go
 func (b *Backend) POST(
@@ -637,6 +651,14 @@ func (b *Backend) POST(
 ---
 
 # But why both?
+
+<Spacer size="1rem" />
+
+<img src="/images/part3/both.jpg" alt="Two drinks" style="max-width: 90%; height: auto; margin: 0 auto; display: block;">
+
+<!--
+Photo by damla selen demir: https://www.pexels.com/photo/coffee-and-drink-26987449/
+-->
 
 ---
 layout: cover
@@ -771,6 +793,8 @@ func (b *Backend) walkTree(
 
 # We only need one blob
 
+<Spacer size="1rem" />
+
 ```go
 if entry.Mode.IsFile() && entry.Hash == modifiedFileHash {
   // Object is a blob, include if it's in our store
@@ -788,6 +812,8 @@ if entry.Mode.IsFile() && entry.Hash == modifiedFileHash {
 
 Tracks with file size
 
+<Spacer size="1rem" />
+
 ![Low Volume](/images/part4/graph5.png)
 
 ---
@@ -796,6 +822,8 @@ Tracks with file size
 
 No longer restricted by timeouts
 
+<Spacer size="1rem" />
+
 ![Low Volume](/images/part4/graph6.png)
 
 ---
@@ -803,6 +831,8 @@ No longer restricted by timeouts
 # Cleanup
 
 Quick and dirty - empty the store every 10 seconds
+
+<Spacer size="1rem" />
 
 ```go
 go func() {
@@ -826,6 +856,8 @@ go func() {
 # Better, but not great
 
 50% of 2GB is still 1GB
+
+<Spacer size="1rem" />
 
 ![Low Volume](/images/part4/graph7.png)
 
@@ -873,35 +905,187 @@ directly with the protocol, maybe keep the objects on the stack rather than the 
 -->
 
 ---
-
-TODO: flesh out this section
-
-https://thefridaydeploy.substack.com/p/can-git-back-a-rest-api-part-4-stability
-
----
 layout: cover
 background: images/part5/cover.jpg
 ---
 
 # Conclusions
 
-Why would you do this?
+Is this a good idea?
 
 <!--
 Photo credit: Photo by Martin Lopez: https://www.pexels.com/photo/man-in-black-blazer-wearing-black-framed-eyeglasses-2399065/
 -->
 
 ---
+layout: cover
+---
 
-TODO: flesh out this section
+# Limitations
+
+---
+layout: image
+image: images/part5/hardwork.jpg
+---
+
+<!--
+Photo by Mikael Blomkvist: https://www.pexels.com/photo/a-man-and-a-woman-working-at-a-construction-site-8961025/
+-->
+
+---
+layout: two-cols-header
+---
+
+# File size
+
+::left::
+
+![Toy crane](/images/part5/toycrane.jpg)
+
+::right::
+
+![Large crane](/images/part5/largecrane.jpg)
+
+<!--
+Poor performance
+1MB
+
+Photo by Brett Jordan: https://www.pexels.com/photo/red-construction-crane-against-cloudy-sky-35567082/
+
+Hard limit on GitHub
+100MB
+-->
+
+---
+
+# Rate Limits
+
+<div class="flex items-center justify-center text-sm mb-8">
+
+| Platform | Reads / minute | Writes / minute | Type | Source |
+|----------|------------------|-------------------|------|--------|
+| **GitHub (Git)** | 900 | 6 | Recommendation | [Source](https://docs.github.com/en/repositories/creating-and-managing-repositories/repository-limits#activity)
+| **GitHub (REST API)** | 83 | 83 | Rate limit (standard) | [Source](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#about-primary-rate-limits)
+| **GitHub (REST API)** | 250 | 250 | Rate limit (enterprise) | [Source](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#about-primary-rate-limits)
+| **GitLab (SSH)** | 600 | 600 | Rate limit | [Source](https://genboree.org/gitlab/help/security/rate_limits.md#git-operations-using-ssh)
+| **Google Secure Source Manager** | 1000 | 1000 | Rate limit | [Source](https://docs.cloud.google.com/secure-source-manager/docs/quotas#usage_limits)
+| **AWS S3** | 300,000 | 180,000 | Throughput expectation | [Source](https://docs.aws.amazon.com/AmazonS3/latest/userguide/optimizing-performance.html)
+
+</div>
 
 ---
 layout: cover
 ---
 
-# What's next?
+# Positives
+
+---
+layout: image
+image: images/part5/cheap.jpg
+---
+<!--
+Photo by Tima Miroshnichenko: https://www.pexels.com/photo/person-holding-dollar-bills-while-using-a-calculator-6266283/
+-->
+
+---
+layout: image
+image: images/part5/logs.jpg
+---
+<!--
+Photo by Aleks BM: https://www.pexels.com/photo/pile-of-brown-wooden-logs-7744517/
+-->
+
+---
+layout: cover
+---
+
+# The answer!
+
+Can Git repos replace S3 buckets?
+
+---
+layout: image
+image: images/part5/drums.jpg 
+---
+
+<!--
+Photo by Hernán Santarelli: https://www.pexels.com/photo/wooden-drumsticks-on-the-snare-drum-6059430/
+-->
+
+---
+layout: image
+image: images/part5/drums2.jpg
+---
+
+<!--
+Photo by Andreu Marquès: https://www.pexels.com/photo/drumsticks-and-a-drum-set-7450047/
+-->
+
+---
+layout: image
+image: images/part5/drums3.jpg
+---
+
+<!--
+Photo by Yan Krukau: https://www.pexels.com/photo/a-person-playing-the-drums-9010100/
+-->
 
 ---
 
-* Git-backed NFS?
-* Maybe that's taking it too far.
+Kinda.
+
+<!--
+GitHub was built on top of a tool allowing Ruby to read/write Git:
+https://deepwiki.com/mojombo/grit
+https://github.com/mojombo/grit
+-->
+
+---
+layout: two-cols-header
+---
+
+# Thank you!
+
+<Spacer size="2rem" />
+
+::left::
+
+## Blog series
+
+<Spacer size="1rem" />
+
+<QRCode
+    :width="300"
+    :height="300"
+    type="svg"
+    data="https://open.substack.com/pub/thefridaydeploy/p/can-git-back-a-rest-api-part-1-the?utm_campaign=post-expanded-share&utm_medium=web"
+    :margin="10"
+    :imageOptions="{ margin: 10 }"
+    :dotsOptions="{ color: '#000000' }"
+    :backgroundOptions="{ color: '#ffffff' }"
+/>
+
+::right::
+
+## Let's connect!
+
+<Spacer size="1rem" />
+
+<QRCode
+    :width="300"
+    :height="300"
+    type="svg"
+    data="https://open.substack.com/pub/thefridaydeploy/p/can-git-back-a-rest-api-part-1-the?utm_campaign=post-expanded-share&utm_medium=web"
+    :margin="10"
+    :imageOptions="{ margin: 10 }"
+    :dotsOptions="{ color: '#000000' }"
+    :backgroundOptions="{ color: '#ffffff' }"
+/>
+
+---
+layout: cover
+---
+
+# Questions
+
+---
