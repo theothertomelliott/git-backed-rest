@@ -21,8 +21,6 @@ colorSchema: dark
 
 And more importantly *should* you?
 
-Tom Elliott - telliott.me
-
 <div class="abs-br m-6 text-xl">
   <button @click="$slidev.nav.openInEditor()" title="Open in Editor" class="slidev-icon-btn">
     <carbon:edit />
