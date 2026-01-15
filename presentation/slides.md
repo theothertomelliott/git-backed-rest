@@ -1,7 +1,7 @@
 ---
 # try also 'default' to start simple
 theme: default
-background: /images/part1/cover.jpg
+background: /images/intro/cover.jpg
 # some information about your slides (markdown enabled)
 title: Can Git Replace S3?
 info: |
@@ -240,6 +240,10 @@ background: images/part1/cover.jpg
 
 A naïve implementation
 
+<!--
+Photo by BOOM 💥 Photography: https://www.pexels.com/photo/person-starting-on-running-block-12585946/
+-->
+
 ---
 
 # Using the Git CLI
@@ -287,16 +291,23 @@ Need to pull before every read to make sure we're in sync with the remote.
 
 ---
 
-# Testing
+# Test setup
+On-demand repos in a test GitHub org
+
+![Test GitHub Organization](/images/part1/test-org.png)
+
+---
+
+# Test sequence
 
 <div class="flex items-center justify-center text-sm mb-8">
 
 | Method | Path | Request Body | Code | Response Body |
 |--------|------|-------------|------|--------------|
 | <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | test.json | - | 404 | - |
-| <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | test.json | `{"name": "Alice"}` | 201 | - |
-| <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | test.json | - | 200 | `{"name": "Alice"}` |
-| <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | test.json | `{"name": "Bob"}` | 409 | - |
+| <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | test.json | `{"num": 1}` | 201 | - |
+| <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | test.json | - | 200 | `{"num": 1}` |
+| <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | test.json | `{"num": 2}` | 409 | - |
 
 </div>
 
@@ -308,13 +319,6 @@ $ go test ./backends/gitporcelain
 I set up a test, which felt a bit slow.
 I wanted to get a sense of what parts took the longest, so I dusted off the profiler.
 -->
-
----
-
-# Test setup
-On-demand repos in a test GitHub org
-
-![Test GitHub Organization](/images/part1/test-org.png)
 
 ---
 layout: image
@@ -683,11 +687,11 @@ backgroundSize: contain
 
 | Operation | Method | Path | Request Body | Expected Code |
 |-----------|--------|------|-------------|--------------|
-| **Create** | <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | `{random1}.json` | ~1KB fixed data | 201 |
-| **Create** | <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | `{random2}.json` | ~1KB fixed data | 201 |
+| **Create** | <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | `{random1}.json` | *random data* | 201 |
+| **Create** | <span class="inline-block bg-green-500 rounded text-white px-2 py-1 text-xs">POST</span> | `{random2}.json` | *random data* | 201 |
 | **Read** | <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | `{random1}.json` | - | 200 |
 | **Read** | <span class="inline-block bg-blue-500 rounded text-white px-2 py-1 text-xs">GET</span> | `{random2}.json` | - | 200 |
-| **Update** | <span class="inline-block bg-orange-500 rounded text-white px-2 py-1 text-xs">PUT</span> | `{random1}.json` | ~1KB modified data | 204 |
+| **Update** | <span class="inline-block bg-orange-500 rounded text-white px-2 py-1 text-xs">PUT</span> | `{random1}.json` | *random data* | 204 |
 | **Delete** | <span class="inline-block bg-red-500 rounded text-white px-2 py-1 text-xs">DELETE</span> | `{random2}.json` | - | 204 |
 
 </div>
@@ -697,7 +701,7 @@ backgroundSize: contain
 # Configurable tests
 
 ```bash
-$ go run ./cmd/uptime_test -repetitions=1 -duration=2h -filesize=1024
+$ go run ./cmd/uptime_test -repetitions=4 -duration=2h -filesize=1024
 ```
 
 <div class="flex items-center justify-center text-sm mb-8">
@@ -1087,5 +1091,3 @@ layout: cover
 ---
 
 # Questions
-
----
