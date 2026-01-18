@@ -43,7 +43,7 @@ func TestGET(t *testing.T) {
 	docPath := "doc1"
 	docContent := "content1"
 
-	_, _, getErr := backend.GET(ctx, docPath)
+	_, getErr := backend.GET(ctx, docPath)
 	if getErr == nil {
 		t.Fatal("expected error for missing document")
 	}
@@ -56,12 +56,15 @@ func TestGET(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, body, getErr := backend.GET(ctx, docPath)
+	result, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContent {
-		t.Errorf("expected body %s, got %s", docContent, string(body))
+	if string(result.Data) != docContent {
+		t.Errorf("expected body %s, got %s", docContent, string(result.Data))
+	}
+	if result.Retries != 0 {
+		t.Errorf("expected 0 retries, got %d", result.Retries)
 	}
 
 	_, postErr := backend.POST(ctx, docPath, []byte(docContent))
@@ -102,12 +105,15 @@ func TestPOST(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, body, getErr := backend.GET(ctx, docPath)
+	result, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContent {
-		t.Errorf("expected body %s, got %s", docContent, string(body))
+	if string(result.Data) != docContent {
+		t.Errorf("expected body %s, got %s", docContent, string(result.Data))
+	}
+	if result.Retries != 0 {
+		t.Errorf("expected 0 retries, got %d", result.Retries)
 	}
 
 	// Try to POST again to same path
@@ -164,12 +170,15 @@ func TestPUT(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, body, getErr := backend.GET(ctx, docPath)
+	result, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContentPut {
-		t.Errorf("expected body %s, got %s", docContentPut, string(body))
+	if string(result.Data) != docContentPut {
+		t.Errorf("expected body %s, got %s", docContentPut, string(result.Data))
+	}
+	if result.Retries != 0 {
+		t.Errorf("expected 0 retries, got %d", result.Retries)
 	}
 }
 
@@ -215,7 +224,7 @@ func TestDELETE(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, getErr := backend.GET(ctx, docPath)
+	_, getErr := backend.GET(ctx, docPath)
 	if getErr == nil {
 		t.Fatal("expected error for missing document after delete")
 	}
@@ -278,20 +287,26 @@ func TestPrefixIsolation(t *testing.T) {
 	}
 
 	// Verify isolation
-	_, body1, getErr := backend1.GET(ctx, docPath)
+	result1, getErr := backend1.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatalf("backend1.GET failed: %v", getErr)
 	}
-	if string(body1) != content1 {
-		t.Errorf("backend1: expected %s, got %s", content1, string(body1))
+	if string(result1.Data) != content1 {
+		t.Errorf("backend1: expected %s, got %s", content1, string(result1.Data))
+	}
+	if result1.Retries != 0 {
+		t.Errorf("backend1: expected 0 retries, got %d", result1.Retries)
 	}
 
-	_, body2, getErr := backend2.GET(ctx, docPath)
+	result2, getErr := backend2.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatalf("backend2.GET failed: %v", getErr)
 	}
-	if string(body2) != content2 {
-		t.Errorf("backend2: expected %s, got %s", content2, string(body2))
+	if string(result2.Data) != content2 {
+		t.Errorf("backend2: expected %s, got %s", content2, string(result2.Data))
+	}
+	if result2.Retries != 0 {
+		t.Errorf("backend2: expected 0 retries, got %d", result2.Retries)
 	}
 }
 

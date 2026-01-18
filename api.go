@@ -1,32 +1,23 @@
 package gitbackedrest
 
-import (
-	"context"
-)
+import "context"
 
-// Context key for storing retry information
-type contextKey string
-
-const RetryCountKey contextKey = "retry_count"
-
-// SetRetryCount sets the retry count in the context
-func SetRetryCount(ctx context.Context, retries int) context.Context {
-	return context.WithValue(ctx, RetryCountKey, retries)
+// GetResult represents the result of a GET operation with data and retry count
+type GetResult struct {
+	Data    []byte
+	Retries int
 }
 
-// GetRetryCount gets the retry count from the context
-func GetRetryCount(ctx context.Context) int {
-	if retries, ok := ctx.Value(RetryCountKey).(int); ok {
-		return retries
-	}
-	return 0
+// Result represents the result of POST, PUT, DELETE operations with retry count
+type Result struct {
+	Retries int
 }
 
 // APIBackend defines the interface for REST API storage backends.
-// Methods return updated context first for retry tracking, followed by results, with errors last.
+// Methods return result structs that include retry counts and data where applicable.
 type APIBackend interface {
-	GET(ctx context.Context, path string) (context.Context, []byte, error)
-	POST(ctx context.Context, path string, body []byte) (context.Context, error)
-	PUT(ctx context.Context, path string, body []byte) (context.Context, error)
-	DELETE(ctx context.Context, path string) (context.Context, error)
+	GET(ctx context.Context, path string) (*GetResult, error)
+	POST(ctx context.Context, path string, body []byte) (*Result, error)
+	PUT(ctx context.Context, path string, body []byte) (*Result, error)
+	DELETE(ctx context.Context, path string) (*Result, error)
 }

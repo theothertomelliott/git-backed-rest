@@ -28,12 +28,12 @@ func Example() {
 
 	// Use the backend
 	ctx := context.Background()
-	_, content, apiErr := backend.GET(ctx, "path/to/file")
+	result, apiErr := backend.GET(ctx, "path/to/file")
 	if apiErr != nil {
 		log.Fatal(apiErr)
 	}
 
-	fmt.Println(string(content))
+	fmt.Println(string(result.Data))
 }
 
 // Example_publicRepo demonstrates accessing a public repository without authentication
@@ -45,12 +45,12 @@ func Example_publicRepo() {
 	defer backend.Close()
 
 	ctx := context.Background()
-	_, content, apiErr := backend.GET(ctx, "README.md")
+	result, apiErr := backend.GET(ctx, "README.md")
 	if apiErr != nil {
 		log.Fatal(apiErr)
 	}
 
-	fmt.Println(string(content))
+	fmt.Println(string(result.Data))
 }
 
 // Example_usernamePassword demonstrates username/password authentication

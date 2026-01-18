@@ -128,7 +128,7 @@ func (b *Backend) GetEndpoint() string {
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, error) {
+func (b *Backend) DELETE(ctx context.Context, path string) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	b.sessionMtx.RLock()
@@ -139,7 +139,9 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 		defer b.writeMtx.Unlock()
 	}
 
+	retries := -1
 	operation := func() (plumbing.Hash, error) {
+		retries++
 		commit, err := b.updateFile(ctx, path, nil, false)
 		if err != nil {
 			if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound, http.StatusInternalServerError) {
@@ -154,9 +156,9 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
 		if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound) {
-			return ctx, err
+			return nil, err
 		}
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -165,11 +167,13 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: retries,
+	}, nil
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, error) {
+func (b *Backend) GET(ctx context.Context, path string) (*gitbackedrest.GetResult, error) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	b.sessionMtx.RLock()
@@ -177,7 +181,7 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 
 	result, err := b.simpleGET(ctx, path)
 	if err != nil {
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -186,7 +190,7 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 		)
 	}
 	if result == nil {
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -194,11 +198,14 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 			),
 		)
 	}
-	return ctx, result, nil
+	return &gitbackedrest.GetResult{
+		Data:    result,
+		Retries: 0, // GET doesn't retry
+	}, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, error) {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	b.sessionMtx.RLock()
@@ -209,7 +216,9 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 		defer b.writeMtx.Unlock()
 	}
 
+	retries := -1
 	operation := func() (plumbing.Hash, error) {
+		retries++
 		commit, err := b.updateFile(ctx, path, body, true)
 		if err != nil {
 			if gitbackedrest.HasHTTPStatusCode(err, http.StatusConflict, http.StatusInternalServerError) {
@@ -223,9 +232,9 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
 		if gitbackedrest.HasHTTPStatusCode(err, http.StatusConflict) {
-			return ctx, err
+			return nil, err
 		}
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -234,11 +243,13 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: retries,
+	}, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, error) {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	b.sessionMtx.RLock()
@@ -249,7 +260,9 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 		defer b.writeMtx.Unlock()
 	}
 
+	retries := -1
 	operation := func() (plumbing.Hash, error) {
+		retries++
 		commit, err := b.updateFile(ctx, path, body, false)
 		if err != nil {
 			if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound, http.StatusInternalServerError) {
@@ -264,9 +277,9 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
 		if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound) {
-			return ctx, err
+			return nil, err
 		}
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -275,7 +288,9 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: retries,
+	}, nil
 }
 
 func (b *Backend) Close() error {

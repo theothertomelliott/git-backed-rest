@@ -36,11 +36,11 @@ type Backend struct {
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, error) {
+func (b *Backend) DELETE(ctx context.Context, path string) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	if err := b.pull(ctx); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -52,7 +52,7 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -60,7 +60,7 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 			),
 		)
 	} else if err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -68,7 +68,7 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 			),
 		)
 	} else if info.IsDir() {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -78,7 +78,7 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 	}
 
 	if err := os.Remove(filePath); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -88,7 +88,7 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("delete %s", path)); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -97,15 +97,17 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0, // GitPorcelain doesn't retry
+	}, nil
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, error) {
+func (b *Backend) GET(ctx context.Context, path string) (*gitbackedrest.GetResult, error) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	if err := b.pull(ctx); err != nil {
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -117,7 +119,7 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -125,7 +127,7 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 			),
 		)
 	} else if err != nil {
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -133,7 +135,7 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 			),
 		)
 	} else if info.IsDir() {
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -144,7 +146,7 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 
 	body, err := os.ReadFile(filePath)
 	if err != nil {
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -152,15 +154,19 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 			),
 		)
 	}
-	return ctx, body, nil
+
+	return &gitbackedrest.GetResult{
+		Data:    body,
+		Retries: 0, // GitPorcelain doesn't retry
+	}, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, error) {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	if err := b.pull(ctx); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -172,7 +178,7 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	_, err := os.Stat(filePath)
 	if err == nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Conflict",
 			gitbackedrest.NewHTTPError(
 				http.StatusConflict,
@@ -181,7 +187,7 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 		)
 	}
 	if err != nil && !os.IsNotExist(err) {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -191,7 +197,7 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 	}
 
 	if err := os.WriteFile(filePath, body, os.ModePerm); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -201,7 +207,7 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("write %s", path)); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -210,15 +216,17 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0, // GitPorcelain doesn't retry
+	}, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, error) {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	if err := b.pull(ctx); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -230,7 +238,7 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -238,7 +246,7 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 			),
 		)
 	} else if err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -246,7 +254,7 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 			),
 		)
 	} else if info.IsDir() {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -256,7 +264,7 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 	}
 
 	if err := os.WriteFile(filePath, body, os.ModePerm); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -266,7 +274,7 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("write %s", path)); err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -275,7 +283,9 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0, // GitPorcelain doesn't retry
+	}, nil
 }
 
 func (b *Backend) pull(ctx context.Context) error {

@@ -20,7 +20,7 @@ func NewRetryExampleBackend() *RetryExampleBackend {
 	}
 }
 
-func (b *RetryExampleBackend) GET(ctx context.Context, path string) (context.Context, []byte, error) {
+func (b *RetryExampleBackend) GET(ctx context.Context, path string) (*gitbackedrest.GetResult, error) {
 	// Simulate a GET that might need retries
 	retries := 0
 	maxRetries := 3
@@ -28,9 +28,11 @@ func (b *RetryExampleBackend) GET(ctx context.Context, path string) (context.Con
 	for retries < maxRetries {
 		// Simulate operation that fails first 2 times
 		if retries >= 2 {
-			// Success! Set retry count in context and return result
-			ctx = gitbackedrest.SetRetryCount(ctx, retries)
-			return ctx, []byte(fmt.Sprintf("data for %s (after %d retries)", path, retries)), nil
+			// Success! Return result with retry count
+			return &gitbackedrest.GetResult{
+				Data:    []byte(fmt.Sprintf("data for %s (after %d retries)", path, retries)),
+				Retries: retries,
+			}, nil
 		}
 		retries++
 		time.Sleep(10 * time.Millisecond) // Simulate delay
@@ -39,10 +41,10 @@ func (b *RetryExampleBackend) GET(ctx context.Context, path string) (context.Con
 	// All retries failed
 	err := gitbackedrest.NewHTTPError(http.StatusInternalServerError, fmt.Errorf("GET failed after %d retries", retries))
 	userErr := gitbackedrest.NewUserError(fmt.Sprintf("GET failed after %d retries", retries), err)
-	return ctx, nil, userErr
+	return nil, userErr
 }
 
-func (b *RetryExampleBackend) POST(ctx context.Context, path string, body []byte) (context.Context, error) {
+func (b *RetryExampleBackend) POST(ctx context.Context, path string, body []byte) (*gitbackedrest.Result, error) {
 	// Simulate a POST that might need retries
 	retries := 0
 	maxRetries := 2
@@ -50,9 +52,10 @@ func (b *RetryExampleBackend) POST(ctx context.Context, path string, body []byte
 	for retries < maxRetries {
 		// Simulate operation that fails first time
 		if retries >= 1 {
-			// Success! Set retry count in context
-			ctx = gitbackedrest.SetRetryCount(ctx, retries)
-			return ctx, nil
+			// Success! Return result with retry count
+			return &gitbackedrest.Result{
+				Retries: retries,
+			}, nil
 		}
 		retries++
 		time.Sleep(10 * time.Millisecond) // Simulate delay
@@ -61,16 +64,17 @@ func (b *RetryExampleBackend) POST(ctx context.Context, path string, body []byte
 	// All retries failed
 	err := gitbackedrest.NewHTTPError(http.StatusInternalServerError, fmt.Errorf("POST failed after %d retries", retries))
 	userErr := gitbackedrest.NewUserError(fmt.Sprintf("POST failed after %d retries", retries), err)
-	return ctx, userErr
+	return nil, userErr
 }
 
-func (b *RetryExampleBackend) PUT(ctx context.Context, path string, body []byte) (context.Context, error) {
+func (b *RetryExampleBackend) PUT(ctx context.Context, path string, body []byte) (*gitbackedrest.Result, error) {
 	// Simulate a PUT that succeeds immediately
-	ctx = gitbackedrest.SetRetryCount(ctx, 0)
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0,
+	}, nil
 }
 
-func (b *RetryExampleBackend) DELETE(ctx context.Context, path string) (context.Context, error) {
+func (b *RetryExampleBackend) DELETE(ctx context.Context, path string) (*gitbackedrest.Result, error) {
 	// Simulate a DELETE that fails after retries
 	retries := 0
 	maxRetries := 3
@@ -83,7 +87,7 @@ func (b *RetryExampleBackend) DELETE(ctx context.Context, path string) (context.
 
 	err := gitbackedrest.NewHTTPError(http.StatusInternalServerError, fmt.Errorf("DELETE failed after %d retries", retries))
 	userErr := gitbackedrest.NewUserError(fmt.Sprintf("DELETE failed after %d retries", retries), err)
-	return ctx, userErr
+	return nil, userErr
 }
 
 func main() {
@@ -95,50 +99,46 @@ func main() {
 
 	// Test GET with retries
 	fmt.Println("\n1. Testing GET with retries:")
-	newCtx, body, err := backend.GET(ctx, "/test")
+	result, err := backend.GET(ctx, "/test")
 	if err != nil {
 		userMessage := gitbackedrest.GetUserMessage(err)
 		statusCode := gitbackedrest.GetHTTPStatusCode(err, 0)
 		fmt.Printf("   GET failed: %s (status: %d)\n", userMessage, statusCode)
 	} else {
-		retries := gitbackedrest.GetRetryCount(newCtx)
-		fmt.Printf("   GET succeeded: %s (retries: %d)\n", string(body), retries)
+		fmt.Printf("   GET succeeded: %s (retries: %d)\n", string(result.Data), result.Retries)
 	}
 
 	// Test POST with retries
 	fmt.Println("\n2. Testing POST with retries:")
-	newCtx, err = backend.POST(ctx, "/test", []byte("test data"))
+	postResult, err := backend.POST(ctx, "/test", []byte("test data"))
 	if err != nil {
 		userMessage := gitbackedrest.GetUserMessage(err)
 		statusCode := gitbackedrest.GetHTTPStatusCode(err, 0)
 		fmt.Printf("   POST failed: %s (status: %d)\n", userMessage, statusCode)
 	} else {
-		retries := gitbackedrest.GetRetryCount(newCtx)
-		fmt.Printf("   POST succeeded (retries: %d)\n", retries)
+		fmt.Printf("   POST succeeded (retries: %d)\n", postResult.Retries)
 	}
 
-	// Test PUT without retries
-	fmt.Println("\n3. Testing PUT without retries:")
-	newCtx, err = backend.PUT(ctx, "/test", []byte("updated data"))
+	// Test PUT with retries
+	fmt.Println("\n3. Testing PUT with retries:")
+	putResult, err := backend.PUT(ctx, "/test", []byte("updated data"))
 	if err != nil {
 		userMessage := gitbackedrest.GetUserMessage(err)
 		statusCode := gitbackedrest.GetHTTPStatusCode(err, 0)
 		fmt.Printf("   PUT failed: %s (status: %d)\n", userMessage, statusCode)
 	} else {
-		retries := gitbackedrest.GetRetryCount(newCtx)
-		fmt.Printf("   PUT succeeded (retries: %d)\n", retries)
+		fmt.Printf("   PUT succeeded (retries: %d)\n", putResult.Retries)
 	}
 
-	// Test DELETE that fails
-	fmt.Println("\n4. Testing DELETE that fails:")
-	newCtx, err = backend.DELETE(ctx, "/test")
+	// Test DELETE with retries
+	fmt.Println("\n4. Testing DELETE with retries:")
+	deleteResult, err := backend.DELETE(ctx, "/test")
 	if err != nil {
 		userMessage := gitbackedrest.GetUserMessage(err)
 		statusCode := gitbackedrest.GetHTTPStatusCode(err, 0)
 		fmt.Printf("   DELETE failed: %s (status: %d)\n", userMessage, statusCode)
 	} else {
-		retries := gitbackedrest.GetRetryCount(newCtx)
-		fmt.Printf("   DELETE succeeded (retries: %d)\n", retries)
+		fmt.Printf("   DELETE succeeded (retries: %d)\n", deleteResult.Retries)
 	}
 
 	fmt.Println("\n=====================================")

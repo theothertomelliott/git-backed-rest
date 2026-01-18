@@ -47,15 +47,13 @@ func TestConcurrentAccessNoLock(t *testing.T) {
 				return
 			}
 
-			_, content, err := backend.GET(ctx, fname(i))
+			result, err := backend.GET(ctx, fname(i))
 			if err != nil {
 				t.Errorf("%d: Error on GET: %v", i, err)
 				return
 			}
-
-			if string(content) != fmt.Sprintf("content%d", i) {
-				t.Errorf("%d: Content mismatch: expected %s, got %s", i, fmt.Sprintf("content%d", i), string(content))
-				return
+			if string(result.Data) != fmt.Sprintf("content%d", i) {
+				t.Errorf("%d: Expected content%d, got %s", i, i, string(result.Data))
 			}
 
 			t.Logf("%d: successful after %s", i, time.Since(start))
@@ -66,13 +64,13 @@ func TestConcurrentAccessNoLock(t *testing.T) {
 	t.Log("Verifying with GETs")
 
 	for i := range 10 {
-		_, content, err := backend.GET(ctx, fname(i))
+		result, err := backend.GET(ctx, fname(i))
 		if err != nil {
 			t.Errorf("%d: Error on GET: %v", i, err)
 		}
 
-		if string(content) != fmt.Sprintf("content%d", i) {
-			t.Errorf("%d: Content mismatch: expected %s, got %s", i, fmt.Sprintf("content%d", i), string(content))
+		if string(result.Data) != fmt.Sprintf("content%d", i) {
+			t.Errorf("%d: Content mismatch: expected %s, got %s", i, fmt.Sprintf("content%d", i), string(result.Data))
 		}
 	}
 
@@ -115,14 +113,14 @@ func TestConcurrentAccessWithLock(t *testing.T) {
 				return
 			}
 
-			_, content, err := backend.GET(ctx, fname(i))
+			result, err := backend.GET(ctx, fname(i))
 			if err != nil {
 				t.Errorf("%d: Error on GET: %v", i, err)
 				return
 			}
 
-			if string(content) != fmt.Sprintf("content%d", i) {
-				t.Errorf("%d: Content mismatch: expected %s, got %s", i, fmt.Sprintf("content%d", i), string(content))
+			if string(result.Data) != fmt.Sprintf("content%d", i) {
+				t.Errorf("%d: Content mismatch: expected %s, got %s", i, fmt.Sprintf("content%d", i), string(result.Data))
 				return
 			}
 
@@ -134,13 +132,13 @@ func TestConcurrentAccessWithLock(t *testing.T) {
 	t.Log("Verifying with GETs")
 
 	for i := 0; i < 10; i++ {
-		_, content, err := backend.GET(ctx, fname(i))
+		result, err := backend.GET(ctx, fname(i))
 		if err != nil {
 			t.Errorf("%d: Error on GET: %v", i, err)
 		}
 
-		if string(content) != fmt.Sprintf("content%d", i) {
-			t.Errorf("%d: Content mismatch: expected %s, got %s", i, fmt.Sprintf("content%d", i), string(content))
+		if string(result.Data) != fmt.Sprintf("content%d", i) {
+			t.Errorf("%d: Content mismatch: expected %s, got %s", i, fmt.Sprintf("content%d", i), string(result.Data))
 		}
 	}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
 	gitbackedrest "github.com/theothertomelliott/git-backed-rest"
 )
@@ -84,29 +85,27 @@ func (b *Backend) buildKey(p string) string {
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, p string) (context.Context, []byte, error) {
+func (b *Backend) GET(ctx context.Context, p string) (*gitbackedrest.GetResult, error) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	key := b.buildKey(p)
 
-	reg := trace.StartRegion(ctx, "GetObject")
-	result, err := b.client.GetObject(ctx, &s3.GetObjectInput{
+	output, err := b.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(b.bucket),
 		Key:    aws.String(key),
 	})
-	reg.End()
 	if err != nil {
 		var noSuchKey *types.NoSuchKey
 		if errors.As(err, &noSuchKey) {
-			return ctx, nil, gitbackedrest.NewUserError(
+			return nil, gitbackedrest.NewUserError(
 				"Not Found",
 				gitbackedrest.NewHTTPError(
 					http.StatusNotFound,
-					fmt.Errorf("object not found: %w", err),
+					errors.New("resource not found"),
 				),
 			)
 		}
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -114,67 +113,54 @@ func (b *Backend) GET(ctx context.Context, p string) (context.Context, []byte, e
 			),
 		)
 	}
-	defer result.Body.Close()
 
-	reg = trace.StartRegion(ctx, "ReadBody")
-	body, err := io.ReadAll(result.Body)
-	reg.End()
+	body, err := io.ReadAll(output.Body)
 	if err != nil {
-		return ctx, nil, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
-				fmt.Errorf("reading body: %w", err),
+				fmt.Errorf("reading object body: %w", err),
 			),
 		)
 	}
 
-	return ctx, body, nil
+	return &gitbackedrest.GetResult{
+		Data:    body,
+		Retries: 0, // S3 GET doesn't retry
+	}, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, p string, body []byte) (context.Context, error) {
+func (b *Backend) POST(ctx context.Context, p string, body []byte) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	key := b.buildKey(p)
 
 	// Check if object already exists
-	reg := trace.StartRegion(ctx, "HeadObject")
 	_, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(b.bucket),
 		Key:    aws.String(key),
 	})
-	reg.End()
 	if err == nil {
-		return ctx, gitbackedrest.NewUserError(
+		// Object exists, return conflict
+		return nil, gitbackedrest.NewUserError(
 			"Conflict",
 			gitbackedrest.NewHTTPError(
 				http.StatusConflict,
-				errors.New("object already exists"),
-			),
-		)
-	}
-	var notFound *types.NotFound
-	if !errors.As(err, &notFound) {
-		return ctx, gitbackedrest.NewUserError(
-			"Internal Server Error",
-			gitbackedrest.NewHTTPError(
-				http.StatusInternalServerError,
-				fmt.Errorf("checking object existence: %w", err),
+				errors.New("resource already exists"),
 			),
 		)
 	}
 
-	// Object doesn't exist, create it
-	reg = trace.StartRegion(ctx, "PutObject")
+	// Upload the object
 	_, err = b.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(b.bucket),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(body),
 	})
-	reg.End()
 	if err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -183,34 +169,37 @@ func (b *Backend) POST(ctx context.Context, p string, body []byte) (context.Cont
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0, // S3 POST doesn't retry
+	}, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, p string, body []byte) (context.Context, error) {
+func (b *Backend) PUT(ctx context.Context, p string, body []byte) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	key := b.buildKey(p)
 
 	// Check if object exists
-	reg := trace.StartRegion(ctx, "HeadObject")
 	_, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(b.bucket),
 		Key:    aws.String(key),
 	})
-	reg.End()
 	if err != nil {
-		var notFound *types.NotFound
-		if errors.As(err, &notFound) {
-			return ctx, gitbackedrest.NewUserError(
+		var noSuchKey *types.NoSuchKey
+		var apiError smithy.APIError
+		if errors.As(err, &noSuchKey) || (errors.As(err, &apiError) && apiError.ErrorCode() == "NotFound") {
+			// Object doesn't exist, return not found
+			return nil, gitbackedrest.NewUserError(
 				"Not Found",
 				gitbackedrest.NewHTTPError(
 					http.StatusNotFound,
-					fmt.Errorf("object not found: %w", err),
+					errors.New("resource not found"),
 				),
 			)
 		}
-		return ctx, gitbackedrest.NewUserError(
+		// Some other error occurred
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -219,16 +208,14 @@ func (b *Backend) PUT(ctx context.Context, p string, body []byte) (context.Conte
 		)
 	}
 
-	// Object exists, update it
-	reg = trace.StartRegion(ctx, "PutObject")
+	// Update the object
 	_, err = b.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(b.bucket),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(body),
 	})
-	reg.End()
 	if err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -237,34 +224,37 @@ func (b *Backend) PUT(ctx context.Context, p string, body []byte) (context.Conte
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0, // S3 PUT doesn't retry
+	}, nil
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, p string) (context.Context, error) {
+func (b *Backend) DELETE(ctx context.Context, p string) (*gitbackedrest.Result, error) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	key := b.buildKey(p)
 
 	// Check if object exists
-	reg := trace.StartRegion(ctx, "HeadObject")
 	_, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(b.bucket),
 		Key:    aws.String(key),
 	})
-	reg.End()
 	if err != nil {
-		var notFound *types.NotFound
-		if errors.As(err, &notFound) {
-			return ctx, gitbackedrest.NewUserError(
+		var noSuchKey *types.NoSuchKey
+		var apiError smithy.APIError
+		if errors.As(err, &noSuchKey) || (errors.As(err, &apiError) && apiError.ErrorCode() == "NotFound") {
+			// Object doesn't exist, return not found
+			return nil, gitbackedrest.NewUserError(
 				"Not Found",
 				gitbackedrest.NewHTTPError(
 					http.StatusNotFound,
-					fmt.Errorf("object not found: %w", err),
+					errors.New("resource not found"),
 				),
 			)
 		}
-		return ctx, gitbackedrest.NewUserError(
+		// Some other error occurred
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -273,15 +263,13 @@ func (b *Backend) DELETE(ctx context.Context, p string) (context.Context, error)
 		)
 	}
 
-	// Object exists, delete it
-	reg = trace.StartRegion(ctx, "DeleteObject")
+	// Delete the object
 	_, err = b.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(b.bucket),
 		Key:    aws.String(key),
 	})
-	reg.End()
 	if err != nil {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Internal Server Error",
 			gitbackedrest.NewHTTPError(
 				http.StatusInternalServerError,
@@ -290,7 +278,9 @@ func (b *Backend) DELETE(ctx context.Context, p string) (context.Context, error)
 		)
 	}
 
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0, // S3 DELETE doesn't retry
+	}, nil
 }
 
 // Close cleans up resources (currently no-op but allows for future cleanup)

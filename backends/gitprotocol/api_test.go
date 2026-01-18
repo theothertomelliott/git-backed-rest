@@ -48,7 +48,7 @@ func TestGet(t *testing.T) {
 	ctx, task = trace.NewTask(ctx, "TestGET")
 	defer task.End()
 
-	_, _, getErr := backend.GET(ctx, docPath)
+	_, getErr := backend.GET(ctx, docPath)
 	if getErr == nil {
 		t.Fatal("expected error for missing document")
 	}
@@ -61,12 +61,15 @@ func TestGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, body, getErr := backend.GET(ctx, docPath)
+	result, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContent {
-		t.Errorf("expected body %s, got %s", docContent, string(body))
+	if string(result.Data) != docContent {
+		t.Errorf("expected body %s, got %s", docContent, string(result.Data))
+	}
+	if result.Retries != 0 {
+		t.Errorf("expected 0 retries, got %d", result.Retries)
 	}
 
 	_, postErr := backend.POST(ctx, docPath, []byte(docContent))
@@ -106,7 +109,7 @@ func TestGetPreexisting(t *testing.T) {
 	ctx, task = trace.NewTask(ctx, "TestGETPreexisting")
 	defer task.End()
 
-	_, _, getErr := backend.GET(ctx, docPath)
+	_, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
@@ -154,12 +157,15 @@ func TestPut(t *testing.T) {
 	}
 
 	t.Log("GET for confirmation")
-	_, body, getErr := backend.GET(ctx, docPath)
+	result, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContentPut {
-		t.Errorf("expected body %s, got %s", docContentPut, string(body))
+	if string(result.Data) != docContentPut {
+		t.Errorf("expected body %s, got %s", docContentPut, string(result.Data))
+	}
+	if result.Retries != 0 {
+		t.Errorf("expected 0 retries, got %d", result.Retries)
 	}
 }
 
@@ -191,7 +197,7 @@ func TestDelete(t *testing.T) {
 	ctx, task = trace.NewTask(ctx, "TestDelete")
 	defer task.End()
 
-	_, _, getErr := backend.GET(ctx, docPath)
+	_, getErr := backend.GET(ctx, docPath)
 	if getErr == nil {
 		t.Fatal("expected error for missing document")
 	}
@@ -204,23 +210,26 @@ func TestDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, body, getErr := backend.GET(ctx, docPath)
+	result, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContent {
-		t.Errorf("expected body %s, got %s", docContent, string(body))
+	if string(result.Data) != docContent {
+		t.Errorf("expected body %s, got %s", docContent, string(result.Data))
+	}
+	if result.Retries != 0 {
+		t.Errorf("expected 0 retries, got %d", result.Retries)
 	}
 
 	if _, err := backend.DELETE(ctx, docPath); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, getErr = backend.GET(ctx, docPath)
-	if getErr == nil {
+	_, deleteErr := backend.GET(ctx, docPath)
+	if deleteErr == nil {
 		t.Fatal("expected error for missing document after delete")
 	}
-	statusCode = gitbackedrest.GetHTTPStatusCode(getErr, 0)
+	statusCode = gitbackedrest.GetHTTPStatusCode(deleteErr, 0)
 	if statusCode != http.StatusNotFound {
 		t.Fatalf("expected not found status, got %d", statusCode)
 	}

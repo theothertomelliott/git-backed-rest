@@ -48,7 +48,7 @@ func TestGet(t *testing.T) {
 	ctx, task = trace.NewTask(ctx, "TestGET")
 	defer task.End()
 
-	_, _, getErr := backend.GET(ctx, docPath)
+	_, getErr := backend.GET(ctx, docPath)
 	if getErr == nil {
 		t.Fatal("expected error for missing document")
 	}
@@ -61,12 +61,15 @@ func TestGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, body, getErr := backend.GET(ctx, docPath)
+	result, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContent {
-		t.Errorf("expected body %s, got %s", docContent, string(body))
+	if string(result.Data) != docContent {
+		t.Errorf("expected body %s, got %s", docContent, string(result.Data))
+	}
+	if result.Retries != 0 {
+		t.Errorf("expected 0 retries, got %d", result.Retries)
 	}
 	_, postErr := backend.POST(ctx, docPath, []byte(docContent))
 	if postErr == nil {
@@ -120,12 +123,12 @@ func TestPut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, body, getErr := backend.GET(ctx, docPath)
+	result, getErr := backend.GET(ctx, docPath)
 	if getErr != nil {
 		t.Fatal(getErr)
 	}
-	if string(body) != docContentPut {
-		t.Errorf("expected body %s, got %s", docContentPut, string(body))
+	if string(result.Data) != docContentPut {
+		t.Errorf("expected body %s, got %s", docContentPut, string(result.Data))
 	}
 }
 

@@ -20,11 +20,14 @@ type Backend struct {
 	data map[string][]byte
 }
 
-func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, error) {
+func (b *Backend) GET(ctx context.Context, path string) (*gitbackedrest.GetResult, error) {
 	if value, ok := b.data[path]; ok {
-		return ctx, value, nil
+		return &gitbackedrest.GetResult{
+			Data:    value,
+			Retries: 0,
+		}, nil
 	}
-	return ctx, nil, gitbackedrest.NewUserError(
+	return nil, gitbackedrest.NewUserError(
 		"Not Found",
 		gitbackedrest.NewHTTPError(
 			http.StatusNotFound,
@@ -33,9 +36,9 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 	)
 }
 
-func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, error) {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) (*gitbackedrest.Result, error) {
 	if _, ok := b.data[path]; ok {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Conflict",
 			gitbackedrest.NewHTTPError(
 				http.StatusConflict,
@@ -44,12 +47,14 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 		)
 	}
 	b.data[path] = body
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0,
+	}, nil
 }
 
-func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, error) {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) (*gitbackedrest.Result, error) {
 	if _, ok := b.data[path]; !ok {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -58,12 +63,14 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 		)
 	}
 	b.data[path] = body
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0,
+	}, nil
 }
 
-func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, error) {
+func (b *Backend) DELETE(ctx context.Context, path string) (*gitbackedrest.Result, error) {
 	if _, ok := b.data[path]; !ok {
-		return ctx, gitbackedrest.NewUserError(
+		return nil, gitbackedrest.NewUserError(
 			"Not Found",
 			gitbackedrest.NewHTTPError(
 				http.StatusNotFound,
@@ -72,5 +79,7 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 		)
 	}
 	delete(b.data, path)
-	return ctx, nil
+	return &gitbackedrest.Result{
+		Retries: 0,
+	}, nil
 }

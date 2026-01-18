@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -74,26 +73,23 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleError handles API errors by extracting status code and user message, then writing HTTP error response
-func (s *Server) handleError(w http.ResponseWriter, err error, newCtx context.Context) (string, int) {
+func (s *Server) handleError(w http.ResponseWriter, err error) (string, int) {
 	statusCode := gitbackedrest.GetHTTPStatusCode(err, http.StatusInternalServerError)
 	userMessage := gitbackedrest.GetUserMessage(err)
 	http.Error(w, userMessage, statusCode)
-	return "error", gitbackedrest.GetRetryCount(newCtx)
+	return "error", 0
 }
 
 func (s *Server) handleGET(w http.ResponseWriter, r *http.Request) (string, int) {
-	newCtx, body, err := s.backend.GET(r.Context(), r.URL.Path)
+	result, err := s.backend.GET(r.Context(), r.URL.Path)
 	if err != nil {
-		return s.handleError(w, err, newCtx)
+		return s.handleError(w, err)
 	}
-
-	// Use updated context to get retry count
-	retries := gitbackedrest.GetRetryCount(newCtx)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "%s", string(body))
-	return "success", retries
+	fmt.Fprintf(w, "%s", string(result.Data))
+	return "success", result.Retries
 }
 
 func (s *Server) handlePOST(w http.ResponseWriter, r *http.Request) (string, int) {
@@ -108,7 +104,7 @@ func (s *Server) handlePOST(w http.ResponseWriter, r *http.Request) (string, int
 				errors.New("request body is required"),
 			),
 		)
-		return s.handleError(w, err, r.Context())
+		return s.handleError(w, err)
 	}
 
 	log.Printf("Server: Reading request body...")
@@ -122,22 +118,19 @@ func (s *Server) handlePOST(w http.ResponseWriter, r *http.Request) (string, int
 				fmt.Errorf("reading request body: %w", err),
 			),
 		)
-		return s.handleError(w, err, r.Context())
+		return s.handleError(w, err)
 	}
 
 	log.Printf("Server: Calling backend.POST...")
-	newCtx, apiErr := s.backend.POST(r.Context(), r.URL.Path, body)
+	result, apiErr := s.backend.POST(r.Context(), r.URL.Path, body)
 	if apiErr != nil {
 		log.Printf("Server: backend.POST failed: %v", apiErr)
-		return s.handleError(w, apiErr, newCtx)
+		return s.handleError(w, apiErr)
 	}
 
-	// Use updated context to get retry count
-	retries := gitbackedrest.GetRetryCount(newCtx)
-
-	log.Printf("Server: backend.POST succeeded with %d retries", retries)
+	log.Printf("Server: backend.POST succeeded with %d retries", result.Retries)
 	w.WriteHeader(http.StatusCreated)
-	return "success", retries
+	return "success", result.Retries
 }
 
 func (s *Server) handlePUT(w http.ResponseWriter, r *http.Request) (string, int) {
@@ -150,30 +143,24 @@ func (s *Server) handlePUT(w http.ResponseWriter, r *http.Request) (string, int)
 				fmt.Errorf("reading request body: %w", err),
 			),
 		)
-		return s.handleError(w, err, r.Context())
+		return s.handleError(w, err)
 	}
-	newCtx, apiErr := s.backend.PUT(r.Context(), r.URL.Path, body)
+	result, apiErr := s.backend.PUT(r.Context(), r.URL.Path, body)
 	if apiErr != nil {
-		return s.handleError(w, apiErr, newCtx)
+		return s.handleError(w, apiErr)
 	}
-
-	// Use updated context to get retry count
-	retries := gitbackedrest.GetRetryCount(newCtx)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
-	return "success", retries
+	return "success", result.Retries
 }
 
 func (s *Server) handleDELETE(w http.ResponseWriter, r *http.Request) (string, int) {
-	newCtx, apiErr := s.backend.DELETE(r.Context(), r.URL.Path)
+	result, apiErr := s.backend.DELETE(r.Context(), r.URL.Path)
 	if apiErr != nil {
-		return s.handleError(w, apiErr, newCtx)
+		return s.handleError(w, apiErr)
 	}
 
-	// Use updated context to get retry count
-	retries := gitbackedrest.GetRetryCount(newCtx)
-
 	w.WriteHeader(http.StatusNoContent)
-	return "success", retries
+	return "success", result.Retries
 }
