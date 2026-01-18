@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"runtime/trace"
 	"sort"
 	"strings"
@@ -77,11 +78,23 @@ func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, must
 	objectExists := objectHash != plumbing.ZeroHash
 	// For POST, the object must not exist
 	if mustNotExist && objectExists {
-		return plumbing.ZeroHash, gitbackedrest.ErrConflict
+		return plumbing.ZeroHash, gitbackedrest.NewUserError(
+			"Conflict",
+			gitbackedrest.NewHTTPError(
+				http.StatusConflict,
+				errors.New("object already exists"),
+			),
+		)
 	}
 	// For PUT, the object must exist
 	if !mustNotExist && !objectExists {
-		return plumbing.ZeroHash, gitbackedrest.ErrNotFound
+		return plumbing.ZeroHash, gitbackedrest.NewUserError(
+			"Not Found",
+			gitbackedrest.NewHTTPError(
+				http.StatusNotFound,
+				errors.New("object not found"),
+			),
+		)
 	}
 
 	// Create new blob with the body content
@@ -107,11 +120,18 @@ func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, must
 
 	// Push the new commit
 	if err := b.pushCommit(ctx, mainHash, newCommitHash, blobHash, "main"); err != nil {
-		if errors.Is(err, gitbackedrest.ErrConflict) {
-			return plumbing.ZeroHash, gitbackedrest.ErrConflict
+		var httpErr *gitbackedrest.HTTPError
+		if errors.As(err, &httpErr) && httpErr.Code == http.StatusConflict {
+			return plumbing.ZeroHash, err
 		}
 		if strings.Contains(err.Error(), "malformed unpack status") || strings.Contains(err.Error(), "encoding packfile") {
-			return plumbing.ZeroHash, gitbackedrest.ErrInternalServerError
+			return plumbing.ZeroHash, gitbackedrest.NewUserError(
+				"Internal Server Error",
+				gitbackedrest.NewHTTPError(
+					http.StatusInternalServerError,
+					fmt.Errorf("push failed: %w", err),
+				),
+			)
 		}
 		return plumbing.ZeroHash, fmt.Errorf("pushing commit: %w", err)
 	}

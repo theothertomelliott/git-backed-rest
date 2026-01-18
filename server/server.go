@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -71,11 +73,18 @@ func (s *Server) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleError handles API errors by extracting status code and user message, then writing HTTP error response
+func (s *Server) handleError(w http.ResponseWriter, err error, newCtx context.Context) (string, int) {
+	statusCode := gitbackedrest.GetHTTPStatusCode(err, http.StatusInternalServerError)
+	userMessage := gitbackedrest.GetUserMessage(err)
+	http.Error(w, userMessage, statusCode)
+	return "error", gitbackedrest.GetRetryCount(newCtx)
+}
+
 func (s *Server) handleGET(w http.ResponseWriter, r *http.Request) (string, int) {
 	newCtx, body, err := s.backend.GET(r.Context(), r.URL.Path)
 	if err != nil {
-		http.Error(w, err.Error(), err.Code)
-		return "error", err.Retries
+		return s.handleError(w, err, newCtx)
 	}
 
 	// Use updated context to get retry count
@@ -92,24 +101,35 @@ func (s *Server) handlePOST(w http.ResponseWriter, r *http.Request) (string, int
 
 	if r.Body == nil {
 		log.Printf("Server: Request body is nil")
-		http.Error(w, "Request body is required", http.StatusBadRequest)
-		return "error", 0
+		err := gitbackedrest.NewUserError(
+			"Request body is required",
+			gitbackedrest.NewHTTPError(
+				http.StatusBadRequest,
+				errors.New("request body is required"),
+			),
+		)
+		return s.handleError(w, err, r.Context())
 	}
 
 	log.Printf("Server: Reading request body...")
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Server: Error reading request body: %v", err)
-		http.Error(w, "Error reading request body", http.StatusInternalServerError)
-		return "error", 0
+		err = gitbackedrest.NewUserError(
+			"Error reading request body",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("reading request body: %w", err),
+			),
+		)
+		return s.handleError(w, err, r.Context())
 	}
 
 	log.Printf("Server: Calling backend.POST...")
 	newCtx, apiErr := s.backend.POST(r.Context(), r.URL.Path, body)
 	if apiErr != nil {
 		log.Printf("Server: backend.POST failed: %v", apiErr)
-		http.Error(w, apiErr.Error(), apiErr.Code)
-		return "error", apiErr.Retries
+		return s.handleError(w, apiErr, newCtx)
 	}
 
 	// Use updated context to get retry count
@@ -123,13 +143,18 @@ func (s *Server) handlePOST(w http.ResponseWriter, r *http.Request) (string, int
 func (s *Server) handlePUT(w http.ResponseWriter, r *http.Request) (string, int) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return "error", 0
+		err = gitbackedrest.NewUserError(
+			"Error reading request body",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("reading request body: %w", err),
+			),
+		)
+		return s.handleError(w, err, r.Context())
 	}
 	newCtx, apiErr := s.backend.PUT(r.Context(), r.URL.Path, body)
 	if apiErr != nil {
-		http.Error(w, apiErr.Error(), apiErr.Code)
-		return "error", apiErr.Retries
+		return s.handleError(w, apiErr, newCtx)
 	}
 
 	// Use updated context to get retry count
@@ -143,8 +168,7 @@ func (s *Server) handlePUT(w http.ResponseWriter, r *http.Request) (string, int)
 func (s *Server) handleDELETE(w http.ResponseWriter, r *http.Request) (string, int) {
 	newCtx, apiErr := s.backend.DELETE(r.Context(), r.URL.Path)
 	if apiErr != nil {
-		http.Error(w, apiErr.Error(), apiErr.Code)
-		return "error", apiErr.Retries
+		return s.handleError(w, apiErr, newCtx)
 	}
 
 	// Use updated context to get retry count

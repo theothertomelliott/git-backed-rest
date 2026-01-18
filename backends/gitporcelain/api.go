@@ -2,7 +2,9 @@ package gitporcelain
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime/trace"
@@ -34,115 +36,246 @@ type Backend struct {
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, error) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	if err := b.pull(ctx); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("pulling: %w", err),
+			),
+		)
 	}
 
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return ctx, gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.NewUserError(
+			"Not Found",
+			gitbackedrest.NewHTTPError(
+				http.StatusNotFound,
+				errors.New("resource not found"),
+			),
+		)
 	} else if err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("checking file: %w", err),
+			),
+		)
 	} else if info.IsDir() {
-		return ctx, gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.NewUserError(
+			"Not Found",
+			gitbackedrest.NewHTTPError(
+				http.StatusNotFound,
+				errors.New("resource not found"),
+			),
+		)
 	}
 
 	if err := os.Remove(filePath); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("removing file: %w", err),
+			),
+		)
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("delete %s", path)); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("committing and pushing: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, *gitbackedrest.APIError) {
+func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, error) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	if err := b.pull(ctx); err != nil {
-		return ctx, nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("pulling: %w", err),
+			),
+		)
 	}
 
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return ctx, nil, gitbackedrest.ErrNotFound
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Not Found",
+			gitbackedrest.NewHTTPError(
+				http.StatusNotFound,
+				errors.New("resource not found"),
+			),
+		)
 	} else if err != nil {
-		return ctx, nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("checking file: %w", err),
+			),
+		)
 	} else if info.IsDir() {
-		return ctx, nil, gitbackedrest.ErrNotFound
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Not Found",
+			gitbackedrest.NewHTTPError(
+				http.StatusNotFound,
+				errors.New("resource not found"),
+			),
+		)
 	}
 
 	body, err := os.ReadFile(filePath)
 	if err != nil {
-		return ctx, nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("reading file: %w", err),
+			),
+		)
 	}
 	return ctx, body, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, error) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	if err := b.pull(ctx); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("pulling: %w", err),
+			),
+		)
 	}
 
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	_, err := os.Stat(filePath)
 	if err == nil {
-		return ctx, gitbackedrest.ErrConflict
+		return ctx, gitbackedrest.NewUserError(
+			"Conflict",
+			gitbackedrest.NewHTTPError(
+				http.StatusConflict,
+				errors.New("resource already exists"),
+			),
+		)
 	}
 	if err != nil && !os.IsNotExist(err) {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("checking file: %w", err),
+			),
+		)
 	}
 
 	if err := os.WriteFile(filePath, body, os.ModePerm); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("writing file: %w", err),
+			),
+		)
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("write %s", path)); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("committing and pushing: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, error) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	if err := b.pull(ctx); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("pulling: %w", err),
+			),
+		)
 	}
 
 	filePath := fmt.Sprintf("%s/%s", b.repoPath, path)
 	info, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		return ctx, gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.NewUserError(
+			"Not Found",
+			gitbackedrest.NewHTTPError(
+				http.StatusNotFound,
+				errors.New("resource not found"),
+			),
+		)
 	} else if err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("checking file: %w", err),
+			),
+		)
 	} else if info.IsDir() {
-		return ctx, gitbackedrest.ErrNotFound
+		return ctx, gitbackedrest.NewUserError(
+			"Not Found",
+			gitbackedrest.NewHTTPError(
+				http.StatusNotFound,
+				errors.New("resource not found"),
+			),
+		)
 	}
 
 	if err := os.WriteFile(filePath, body, os.ModePerm); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("writing file: %w", err),
+			),
+		)
 	}
 
 	if err := b.commitAndPush(ctx, fmt.Sprintf("write %s", path)); err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("committing and pushing: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil
-
 }
 
 func (b *Backend) pull(ctx context.Context) error {

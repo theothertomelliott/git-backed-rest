@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"path"
 	"runtime/trace"
 
@@ -83,7 +84,7 @@ func (b *Backend) buildKey(p string) string {
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, p string) (context.Context, []byte, *gitbackedrest.APIError) {
+func (b *Backend) GET(ctx context.Context, p string) (context.Context, []byte, error) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	key := b.buildKey(p)
@@ -97,9 +98,21 @@ func (b *Backend) GET(ctx context.Context, p string) (context.Context, []byte, *
 	if err != nil {
 		var noSuchKey *types.NoSuchKey
 		if errors.As(err, &noSuchKey) {
-			return ctx, nil, gitbackedrest.ErrNotFound
+			return ctx, nil, gitbackedrest.NewUserError(
+				"Not Found",
+				gitbackedrest.NewHTTPError(
+					http.StatusNotFound,
+					fmt.Errorf("object not found: %w", err),
+				),
+			)
 		}
-		return ctx, nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("getting object: %w", err),
+			),
+		)
 	}
 	defer result.Body.Close()
 
@@ -107,14 +120,20 @@ func (b *Backend) GET(ctx context.Context, p string) (context.Context, []byte, *
 	body, err := io.ReadAll(result.Body)
 	reg.End()
 	if err != nil {
-		return ctx, nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("reading body: %w", err),
+			),
+		)
 	}
 
 	return ctx, body, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, p string, body []byte) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) POST(ctx context.Context, p string, body []byte) (context.Context, error) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	key := b.buildKey(p)
@@ -127,11 +146,23 @@ func (b *Backend) POST(ctx context.Context, p string, body []byte) (context.Cont
 	})
 	reg.End()
 	if err == nil {
-		return ctx, gitbackedrest.ErrConflict
+		return ctx, gitbackedrest.NewUserError(
+			"Conflict",
+			gitbackedrest.NewHTTPError(
+				http.StatusConflict,
+				errors.New("object already exists"),
+			),
+		)
 	}
 	var notFound *types.NotFound
 	if !errors.As(err, &notFound) {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("checking object existence: %w", err),
+			),
+		)
 	}
 
 	// Object doesn't exist, create it
@@ -143,14 +174,20 @@ func (b *Backend) POST(ctx context.Context, p string, body []byte) (context.Cont
 	})
 	reg.End()
 	if err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("putting object: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, p string, body []byte) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) PUT(ctx context.Context, p string, body []byte) (context.Context, error) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	key := b.buildKey(p)
@@ -165,9 +202,21 @@ func (b *Backend) PUT(ctx context.Context, p string, body []byte) (context.Conte
 	if err != nil {
 		var notFound *types.NotFound
 		if errors.As(err, &notFound) {
-			return ctx, gitbackedrest.ErrNotFound
+			return ctx, gitbackedrest.NewUserError(
+				"Not Found",
+				gitbackedrest.NewHTTPError(
+					http.StatusNotFound,
+					fmt.Errorf("object not found: %w", err),
+				),
+			)
 		}
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("checking object existence: %w", err),
+			),
+		)
 	}
 
 	// Object exists, update it
@@ -179,14 +228,20 @@ func (b *Backend) PUT(ctx context.Context, p string, body []byte) (context.Conte
 	})
 	reg.End()
 	if err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("putting object: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, p string) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) DELETE(ctx context.Context, p string) (context.Context, error) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	key := b.buildKey(p)
@@ -201,9 +256,21 @@ func (b *Backend) DELETE(ctx context.Context, p string) (context.Context, *gitba
 	if err != nil {
 		var notFound *types.NotFound
 		if errors.As(err, &notFound) {
-			return ctx, gitbackedrest.ErrNotFound
+			return ctx, gitbackedrest.NewUserError(
+				"Not Found",
+				gitbackedrest.NewHTTPError(
+					http.StatusNotFound,
+					fmt.Errorf("object not found: %w", err),
+				),
+			)
 		}
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("checking object existence: %w", err),
+			),
+		)
 	}
 
 	// Object exists, delete it
@@ -214,7 +281,13 @@ func (b *Backend) DELETE(ctx context.Context, p string) (context.Context, *gitba
 	})
 	reg.End()
 	if err != nil {
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("deleting object: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil

@@ -2,6 +2,7 @@ package s3
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"runtime"
 	"runtime/trace"
@@ -43,8 +44,12 @@ func TestGET(t *testing.T) {
 	docContent := "content1"
 
 	_, _, getErr := backend.GET(ctx, docPath)
-	if getErr != gitbackedrest.ErrNotFound {
-		t.Fatalf("expected ErrNotFound, got %v", getErr)
+	if getErr == nil {
+		t.Fatal("expected error for missing document")
+	}
+	statusCode := gitbackedrest.GetHTTPStatusCode(getErr, 0)
+	if statusCode != http.StatusNotFound {
+		t.Fatalf("expected not found status, got %d", statusCode)
 	}
 
 	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
@@ -59,8 +64,13 @@ func TestGET(t *testing.T) {
 		t.Errorf("expected body %s, got %s", docContent, string(body))
 	}
 
-	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err == nil || err != gitbackedrest.ErrConflict {
-		t.Errorf("expected conflict error on post to existing path, got %v", err)
+	_, postErr := backend.POST(ctx, docPath, []byte(docContent))
+	if postErr == nil {
+		t.Fatal("expected conflict error on post to existing path")
+	}
+	statusCode = gitbackedrest.GetHTTPStatusCode(postErr, 0)
+	if statusCode != http.StatusConflict {
+		t.Fatalf("expected conflict status, got %d", statusCode)
 	}
 }
 
@@ -101,8 +111,13 @@ func TestPOST(t *testing.T) {
 	}
 
 	// Try to POST again to same path
-	if _, err := backend.POST(ctx, docPath, []byte("different")); err != gitbackedrest.ErrConflict {
-		t.Errorf("expected ErrConflict, got %v", err)
+	_, postErr2 := backend.POST(ctx, docPath, []byte("different"))
+	if postErr2 == nil {
+		t.Fatal("expected conflict error on post to existing path")
+	}
+	statusCode := gitbackedrest.GetHTTPStatusCode(postErr2, 0)
+	if statusCode != http.StatusConflict {
+		t.Fatalf("expected conflict status, got %d", statusCode)
 	}
 }
 
@@ -131,8 +146,14 @@ func TestPUT(t *testing.T) {
 	docContentPost := "content1"
 	docContentPut := "content2"
 
-	if _, err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
-		t.Errorf("expected not found error on put to missing path, got %v", err)
+	t.Log("First PUT - should fail")
+	_, putErr := backend.PUT(ctx, docPath, []byte(docContentPut))
+	if putErr == nil {
+		t.Fatal("expected not found error on put to missing path")
+	}
+	statusCode := gitbackedrest.GetHTTPStatusCode(putErr, 0)
+	if statusCode != http.StatusNotFound {
+		t.Fatalf("expected not found status, got %d", statusCode)
 	}
 
 	if _, err := backend.POST(ctx, docPath, []byte(docContentPost)); err != nil {
@@ -176,8 +197,14 @@ func TestDELETE(t *testing.T) {
 	docPath := "doc_delete"
 	docContent := "content_delete"
 
-	if _, err := backend.DELETE(ctx, docPath); err != gitbackedrest.ErrNotFound {
-		t.Errorf("expected ErrNotFound on delete of non-existent path, got %v", err)
+	t.Log("DELETE - should fail on non-existent path")
+	_, deleteErr := backend.DELETE(ctx, docPath)
+	if deleteErr == nil {
+		t.Fatal("expected not found error on delete of non-existent path")
+	}
+	statusCode := gitbackedrest.GetHTTPStatusCode(deleteErr, 0)
+	if statusCode != http.StatusNotFound {
+		t.Fatalf("expected not found status, got %d", statusCode)
 	}
 
 	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
@@ -189,8 +216,12 @@ func TestDELETE(t *testing.T) {
 	}
 
 	_, _, getErr := backend.GET(ctx, docPath)
-	if getErr != gitbackedrest.ErrNotFound {
-		t.Errorf("expected ErrNotFound after delete, got %v", getErr)
+	if getErr == nil {
+		t.Fatal("expected error for missing document after delete")
+	}
+	statusCode = gitbackedrest.GetHTTPStatusCode(getErr, 0)
+	if statusCode != http.StatusNotFound {
+		t.Fatalf("expected not found status, got %d", statusCode)
 	}
 }
 

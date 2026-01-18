@@ -3,13 +3,14 @@ package gitprotocol
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"runtime"
 	"runtime/trace"
 	"testing"
 
 	"github.com/go-git/go-git/v6/plumbing/transport"
-	"github.com/go-git/go-git/v6/plumbing/transport/http"
+	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
 	"github.com/go-git/go-git/v6/plumbing/transport/ssh"
 	"github.com/google/go-github/v79/github"
 	"github.com/joho/godotenv"
@@ -48,8 +49,12 @@ func TestGet(t *testing.T) {
 	defer task.End()
 
 	_, _, getErr := backend.GET(ctx, docPath)
-	if getErr != gitbackedrest.ErrNotFound {
-		t.Fatal(getErr)
+	if getErr == nil {
+		t.Fatal("expected error for missing document")
+	}
+	statusCode := gitbackedrest.GetHTTPStatusCode(getErr, 0)
+	if statusCode != http.StatusNotFound {
+		t.Fatalf("expected not found status, got %d", statusCode)
 	}
 
 	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
@@ -64,8 +69,13 @@ func TestGet(t *testing.T) {
 		t.Errorf("expected body %s, got %s", docContent, string(body))
 	}
 
-	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err == nil || err != gitbackedrest.ErrConflict {
-		t.Errorf("expected conflict error on post to existing path, got %v", err)
+	_, postErr := backend.POST(ctx, docPath, []byte(docContent))
+	if postErr == nil {
+		t.Fatal("expected conflict error on post to existing path")
+	}
+	statusCode = gitbackedrest.GetHTTPStatusCode(postErr, 0)
+	if statusCode != http.StatusConflict {
+		t.Fatalf("expected conflict status, got %d", statusCode)
 	}
 }
 
@@ -124,8 +134,13 @@ func TestPut(t *testing.T) {
 	docContentPut := "content2"
 
 	t.Log("First PUT - should fail")
-	if _, err := backend.PUT(ctx, docPath, []byte(docContentPut)); err == nil || err != gitbackedrest.ErrNotFound {
-		t.Errorf("expected not found error on put to missing path, got %v", err)
+	_, putErr := backend.PUT(ctx, docPath, []byte(docContentPut))
+	if putErr == nil {
+		t.Fatal("expected not found error on put to missing path")
+	}
+	statusCode := gitbackedrest.GetHTTPStatusCode(putErr, 0)
+	if statusCode != http.StatusNotFound {
+		t.Fatalf("expected not found status, got %d", statusCode)
 	}
 
 	t.Log("POST")
@@ -177,8 +192,12 @@ func TestDelete(t *testing.T) {
 	defer task.End()
 
 	_, _, getErr := backend.GET(ctx, docPath)
-	if getErr != gitbackedrest.ErrNotFound {
-		t.Fatal(getErr)
+	if getErr == nil {
+		t.Fatal("expected error for missing document")
+	}
+	statusCode := gitbackedrest.GetHTTPStatusCode(getErr, 0)
+	if statusCode != http.StatusNotFound {
+		t.Fatalf("expected not found status, got %d", statusCode)
 	}
 
 	if _, err := backend.POST(ctx, docPath, []byte(docContent)); err != nil {
@@ -198,8 +217,12 @@ func TestDelete(t *testing.T) {
 	}
 
 	_, _, getErr = backend.GET(ctx, docPath)
-	if getErr != gitbackedrest.ErrNotFound {
-		t.Fatal(getErr)
+	if getErr == nil {
+		t.Fatal("expected error for missing document after delete")
+	}
+	statusCode = gitbackedrest.GetHTTPStatusCode(getErr, 0)
+	if statusCode != http.StatusNotFound {
+		t.Fatalf("expected not found status, got %d", statusCode)
 	}
 }
 
@@ -246,7 +269,7 @@ func getAuthForEndpoint(t *testing.T, endpoint string) transport.AuthMethod {
 		}
 
 		// GitHub uses BasicAuth with token as password
-		return &http.BasicAuth{
+		return &githttp.BasicAuth{
 			Username: "git", // Can be any non-empty string for token auth
 			Password: githubToken,
 		}

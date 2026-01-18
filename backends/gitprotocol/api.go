@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"runtime/trace"
 	"sync"
 	"time"
@@ -127,7 +128,7 @@ func (b *Backend) GetEndpoint() string {
 }
 
 // DELETE implements gitbackedrest.APIBackend.
-func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, error) {
 	defer trace.StartRegion(ctx, "DELETE").End()
 
 	b.sessionMtx.RLock()
@@ -141,7 +142,7 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gi
 	operation := func() (plumbing.Hash, error) {
 		commit, err := b.simplePOST(ctx, path, nil, false)
 		if err != nil {
-			if err == gitbackedrest.ErrNotFound || err == gitbackedrest.ErrInternalServerError {
+			if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound, http.StatusInternalServerError) {
 				return plumbing.ZeroHash, backoff.Permanent(err)
 			}
 			fmt.Println("Error, will retry:", err)
@@ -152,18 +153,23 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, *gi
 
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
-		if errors.Is(err, gitbackedrest.ErrNotFound) {
-			return ctx, gitbackedrest.ErrNotFound
+		if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound) {
+			return ctx, err
 		}
-		fmt.Println("Error:", err)
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("delete operation failed: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil
 }
 
 // GET implements gitbackedrest.APIBackend.
-func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, *gitbackedrest.APIError) {
+func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte, error) {
 	defer trace.StartRegion(ctx, "GET").End()
 
 	b.sessionMtx.RLock()
@@ -171,16 +177,28 @@ func (b *Backend) GET(ctx context.Context, path string) (context.Context, []byte
 
 	result, err := b.simpleGET(ctx, path)
 	if err != nil {
-		return ctx, nil, gitbackedrest.ErrInternalServerError
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("getting resource: %w", err),
+			),
+		)
 	}
 	if result == nil {
-		return ctx, nil, gitbackedrest.ErrNotFound
+		return ctx, nil, gitbackedrest.NewUserError(
+			"Not Found",
+			gitbackedrest.NewHTTPError(
+				http.StatusNotFound,
+				errors.New("resource not found"),
+			),
+		)
 	}
 	return ctx, result, nil
 }
 
 // POST implements gitbackedrest.APIBackend.
-func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.Context, error) {
 	defer trace.StartRegion(ctx, "POST").End()
 
 	b.sessionMtx.RLock()
@@ -194,11 +212,8 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 	operation := func() (plumbing.Hash, error) {
 		commit, err := b.simplePOST(ctx, path, body, true)
 		if err != nil {
-			if err == gitbackedrest.ErrConflict {
-				return plumbing.ZeroHash, backoff.Permanent(gitbackedrest.ErrConflict)
-			}
-			if err == gitbackedrest.ErrInternalServerError {
-				return plumbing.ZeroHash, backoff.Permanent(gitbackedrest.ErrInternalServerError)
+			if gitbackedrest.HasHTTPStatusCode(err, http.StatusConflict, http.StatusInternalServerError) {
+				return plumbing.ZeroHash, backoff.Permanent(err)
 			}
 			return plumbing.ZeroHash, err
 		}
@@ -207,18 +222,23 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
-		if errors.Is(err, gitbackedrest.ErrConflict) {
-			return ctx, gitbackedrest.ErrConflict
+		if gitbackedrest.HasHTTPStatusCode(err, http.StatusConflict) {
+			return ctx, err
 		}
-		fmt.Println("Error:", err)
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("post operation failed: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil
 }
 
 // PUT implements gitbackedrest.APIBackend.
-func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, *gitbackedrest.APIError) {
+func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Context, error) {
 	defer trace.StartRegion(ctx, "PUT").End()
 
 	b.sessionMtx.RLock()
@@ -232,7 +252,7 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 	operation := func() (plumbing.Hash, error) {
 		commit, err := b.simplePOST(ctx, path, body, false)
 		if err != nil {
-			if err == gitbackedrest.ErrNotFound || err == gitbackedrest.ErrInternalServerError {
+			if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound, http.StatusInternalServerError) {
 				return plumbing.ZeroHash, backoff.Permanent(err)
 			}
 			fmt.Println("Error, will retry:", err)
@@ -243,11 +263,16 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 
 	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
-		if errors.Is(err, gitbackedrest.ErrNotFound) {
-			return ctx, gitbackedrest.ErrNotFound
+		if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound) {
+			return ctx, err
 		}
-		fmt.Println("Error:", err)
-		return ctx, gitbackedrest.ErrInternalServerError
+		return ctx, gitbackedrest.NewUserError(
+			"Internal Server Error",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				fmt.Errorf("put operation failed: %w", err),
+			),
+		)
 	}
 
 	return ctx, nil
