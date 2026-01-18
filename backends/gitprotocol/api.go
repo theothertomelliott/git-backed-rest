@@ -140,7 +140,7 @@ func (b *Backend) DELETE(ctx context.Context, path string) (context.Context, err
 	}
 
 	operation := func() (plumbing.Hash, error) {
-		commit, err := b.simplePOST(ctx, path, nil, false)
+		commit, err := b.updateFile(ctx, path, nil, false)
 		if err != nil {
 			if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound, http.StatusInternalServerError) {
 				return plumbing.ZeroHash, backoff.Permanent(err)
@@ -210,7 +210,7 @@ func (b *Backend) POST(ctx context.Context, path string, body []byte) (context.C
 	}
 
 	operation := func() (plumbing.Hash, error) {
-		commit, err := b.simplePOST(ctx, path, body, true)
+		commit, err := b.updateFile(ctx, path, body, true)
 		if err != nil {
 			if gitbackedrest.HasHTTPStatusCode(err, http.StatusConflict, http.StatusInternalServerError) {
 				return plumbing.ZeroHash, backoff.Permanent(err)
@@ -250,7 +250,7 @@ func (b *Backend) PUT(ctx context.Context, path string, body []byte) (context.Co
 	}
 
 	operation := func() (plumbing.Hash, error) {
-		commit, err := b.simplePOST(ctx, path, body, false)
+		commit, err := b.updateFile(ctx, path, body, false)
 		if err != nil {
 			if gitbackedrest.HasHTTPStatusCode(err, http.StatusNotFound, http.StatusInternalServerError) {
 				return plumbing.ZeroHash, backoff.Permanent(err)

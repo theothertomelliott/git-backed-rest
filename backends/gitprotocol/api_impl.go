@@ -55,7 +55,7 @@ func (b *Backend) simpleGET(ctx context.Context, path string) ([]byte, error) {
 	return b.readBlob(blob)
 }
 
-func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, mustNotExist bool) (plumbing.Hash, error) {
+func (b *Backend) updateFile(ctx context.Context, path string, body []byte, mustNotExist bool) (plumbing.Hash, error) {
 	path = strings.TrimPrefix(path, "/")
 
 	conn, err := b.getReadConnection(ctx)
@@ -102,20 +102,38 @@ func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, must
 	if body != nil {
 		blobHash, err = b.createBlobHash(ctx, body)
 		if err != nil {
-			return plumbing.ZeroHash, fmt.Errorf("creating blob: %w", err)
+			return plumbing.ZeroHash, gitbackedrest.NewUserError(
+				"Could not create blob",
+				gitbackedrest.NewHTTPError(
+					http.StatusInternalServerError,
+					err,
+				),
+			)
 		}
 	}
 
 	// Add the new blob to the tree
 	newTreeHash, err := b.addToTree(tree, path, blobHash)
 	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("adding to tree: %w", err)
+		return plumbing.ZeroHash, gitbackedrest.NewUserError(
+			"Could not add to tree",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				err,
+			),
+		)
 	}
 
 	// Create new commit of the updated tree hash on top of the current main hash
 	newCommitHash, err := b.createCommit(ctx, mainHash, newTreeHash, fmt.Sprintf("write %s", path))
 	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("creating commit: %w", err)
+		return plumbing.ZeroHash, gitbackedrest.NewUserError(
+			"Could not create commit",
+			gitbackedrest.NewHTTPError(
+				http.StatusInternalServerError,
+				err,
+			),
+		)
 	}
 
 	// Push the new commit
@@ -126,7 +144,7 @@ func (b *Backend) simplePOST(ctx context.Context, path string, body []byte, must
 		}
 		if strings.Contains(err.Error(), "malformed unpack status") || strings.Contains(err.Error(), "encoding packfile") {
 			return plumbing.ZeroHash, gitbackedrest.NewUserError(
-				"Internal Server Error",
+				"Error packing",
 				gitbackedrest.NewHTTPError(
 					http.StatusInternalServerError,
 					fmt.Errorf("push failed: %w", err),
