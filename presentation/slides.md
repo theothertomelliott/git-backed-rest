@@ -15,6 +15,7 @@ class: text-center
 mdc: true
 # force color schema for the slides, can be 'auto', 'light', or 'dark'
 colorSchema: dark
+transition: null
 ---
 
 # Can you use Git to replace S3?
